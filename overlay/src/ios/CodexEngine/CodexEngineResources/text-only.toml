@@ -1,0 +1,31 @@
+# OpenMinis Codex first slice: reviewed text-only profile.
+# Values are copied into a per-session CODEX_HOME; never edit a user's home.
+file_opener = "none"
+include_apps_instructions = false
+cli_auth_credentials_store = "ephemeral"
+web_search = "disabled"
+
+[features]
+apps = false
+shell_tool = false
+view_image = false
+sleep_tool = false
+code_mode = false
+code_mode_host = false
+multi_agent = false
+multi_agent_v2 = false
+stable_environment_tools = false
+request_permissions_tool = false
+in_app_updates = false
+in_app_browser = false
+in_app_chat = false
+in_app_dictation = false
+browser_use = false
+browser_use_external = false
+browser_use_full_cdp_access = false
+computer_use = false
+api_key_model_discovery = false
+remote_plugin = false
+
+[skills.bundled]
+enabled = false

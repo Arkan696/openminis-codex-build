@@ -1,0 +1,221 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// NOT EXECUTED: add to an iOS XCTest target with the 3 overlay Swift files and
+// OMCodexProcessHost bridging header. Fixture transport never launches the core.
+import XCTest
+import Foundation
+
+@MainActor
+private final class FixtureTransport: CodexTransport {
+    var workingDirectory: String? = "/tmp/fixture-workspace"
+    var messageHandler: (([String: Any]) -> Void)?
+    var diagnosticHandler: ((String) -> Void)?
+    var terminationHandler: ((Int32, Int32) -> Void)?
+    var sent: [[String: Any]] = []
+    var stopCount = 0
+    func start(in bundle: Bundle, completion: @escaping (Error?) -> Void) { completion(nil) }
+    func send(_ message: [String: Any], completion: @escaping (Error?) -> Void) {
+        sent.append(message)
+        completion(nil)
+    }
+    func stop(completion: @escaping () -> Void) { stopCount += 1; completion() }
+    func last(_ method: String) -> [String: Any] {
+        sent.last { $0["method"] as? String == method }!
+    }
+    func reply(_ method: String, _ result: [String: Any]) {
+        messageHandler?(["id": last(method)["id"]!, "result": result])
+    }
+    func event(_ method: String, _ params: [String: Any]) {
+        messageHandler?(["method": method, "params": params])
+    }
+}
+
+@MainActor
+final class CodexSessionEngineTests: XCTestCase {
+    private func connected(_ host: FixtureTransport, timeout: TimeInterval = 15) -> CodexSessionEngine {
+        let engine = CodexSessionEngine(requestTimeout: timeout, transportFactory: { host })
+        engine.connect()
+        host.reply("initialize", ["userAgent": "fixture"])
+        XCTAssertEqual(host.sent[1]["method"] as? String, "initialized")
+        host.reply("account/read", ["account": ["type": "chatgpt"], "requiresOpenaiAuth": true])
+        XCTAssertEqual(engine.state, .ready)
+        return engine
+    }
+    private func streaming(_ host: FixtureTransport) -> CodexSessionEngine {
+        let engine = connected(host)
+        engine.send(text: "fixture prompt")
+        host.reply("thread/start", ["thread": ["id": "thread"]])
+        host.reply("turn/start", ["turn": turn("inProgress")])
+        XCTAssertEqual(engine.state, .streaming)
+        return engine
+    }
+    private func turn(_ status: String, items: [[String: Any]] = []) -> [String: Any] {
+        ["id": "turn", "status": status, "items": items, "error": NSNull()]
+    }
+    private func delta(_ host: FixtureTransport, _ text: String, turn: String = "turn") {
+        host.event("item/agentMessage/delta", ["threadId": "thread", "turnId": turn,
+                                                "itemId": "item", "delta": text])
+    }
+
+    func testHandshakeAndReadOnlyPolicy() {
+        let host = FixtureTransport()
+        let engine = connected(host)
+        let initParams = host.last("initialize")["params"] as! [String: Any]
+        let info = initParams["clientInfo"] as! [String: Any]
+        let caps = initParams["capabilities"] as! [String: Any]
+        XCTAssertEqual(info["version"] as? String, "0.1")
+        XCTAssertEqual(caps["explicitGatewayOauth"] as? Bool, true)
+        XCTAssertEqual(caps["experimentalApi"] as? Bool, true)
+        engine.send(text: "hello")
+        let thread = host.last("thread/start")["params"] as! [String: Any]
+        XCTAssertEqual(thread["ephemeral"] as? Bool, true)
+        XCTAssertEqual(thread["sandbox"] as? String, "read-only")
+        XCTAssertEqual(thread["approvalPolicy"] as? String, "untrusted")
+        XCTAssertEqual((thread["environments"] as? [Any])?.count, 0)
+        host.reply("thread/start", ["thread": ["id": "thread"]])
+        let params = host.last("turn/start")["params"] as! [String: Any]
+        let policy = params["sandboxPolicy"] as! [String: Any]
+        XCTAssertEqual(policy["type"] as? String, "readOnly")
+        XCTAssertEqual(policy["networkAccess"] as? Bool, false)
+        XCTAssertEqual((params["environments"] as? [Any])?.count, 0)
+        let input = (params["input"] as! [[String: Any]])[0]
+        XCTAssertEqual(input["type"] as? String, "text")
+        XCTAssertEqual((input["text_elements"] as? [Any])?.count, 0)
+        XCTAssertTrue(host.sent.allSatisfy { $0["jsonrpc"] == nil })
+        engine.stop()
+    }
+
+    func testStopBeforeThreadResponseStopsHostAndIgnoresLateResponse() {
+        let host = FixtureTransport()
+        let engine = connected(host)
+        engine.send(text: "hello")
+        let late = host.messageHandler!
+        let id = host.last("thread/start")["id"]!
+        engine.interruptOrStop()
+        late(["id": id, "result": ["thread": ["id": "late-thread"]]])
+        XCTAssertEqual(host.stopCount, 1)
+        XCTAssertEqual(engine.state, .idle)
+        XCTAssertNil(engine.threadId)
+        XCTAssertFalse(host.sent.contains { $0["method"] as? String == "turn/start" })
+    }
+
+    func testEarlyDeltaReplayedAndFinalTextReplacesRatherThanAppends() {
+        let host = FixtureTransport()
+        let engine = connected(host)
+        engine.send(text: "hello")
+        host.reply("thread/start", ["thread": ["id": "thread"]])
+        delta(host, "A")
+        delta(host, "ignored", turn: "stale-turn")
+        host.reply("turn/start", ["turn": turn("inProgress")])
+        delta(host, "B")
+        let item: [String: Any] = ["id": "item", "type": "agentMessage", "text": "ABC"]
+        let params: [String: Any] = ["threadId": "thread", "turnId": "turn", "item": item]
+        host.event("item/completed", params)
+        host.event("item/completed", params)
+        delta(host, "late")
+        host.event("turn/completed", ["threadId": "thread", "turn": turn("completed", items: [item])])
+        XCTAssertEqual(engine.entries.filter { $0.role == .assistant }.map(\.text), ["ABC"])
+        XCTAssertEqual(engine.lastTurnStatus, "completed")
+        XCTAssertEqual(engine.state, .ready)
+        engine.stop()
+    }
+
+    func testInterruptIsNotTerminalUntilCompletedNotification() {
+        let host = FixtureTransport()
+        let engine = streaming(host)
+        engine.interruptOrStop()
+        host.reply("turn/interrupt", [:])
+        XCTAssertEqual(engine.state, .interrupting)
+        host.event("turn/completed", ["threadId": "thread", "turn": turn("interrupted")])
+        XCTAssertEqual(engine.lastTurnStatus, "interrupted")
+        XCTAssertEqual(engine.state, .ready)
+        engine.stop()
+    }
+
+    func testLoginIDMustMatchAndAccountMustConfirm() {
+        let host = FixtureTransport()
+        let engine = CodexSessionEngine(transportFactory: { host })
+        engine.connect()
+        host.reply("initialize", ["userAgent": "fixture"])
+        host.reply("account/read", ["account": NSNull(), "requiresOpenaiAuth": true])
+        engine.loginChatGPT()
+        host.reply("account/login/start", ["type": "chatgpt", "loginId": "login",
+                                             "authUrl": "https://auth.openai.com/authorize?code=fixture"])
+        host.event("account/login/completed", ["loginId": "wrong", "success": true])
+        XCTAssertEqual(engine.state, .loggingIn)
+        host.event("account/login/completed", ["loginId": "login", "success": true])
+        XCTAssertEqual(engine.state, .confirmingLogin)
+        XCTAssertNotNil(engine.browser)
+        host.reply("account/read", ["account": ["type": "chatgpt"], "requiresOpenaiAuth": true])
+        XCTAssertEqual(engine.state, .ready)
+        XCTAssertNil(engine.browser)
+        engine.browserDidClose()
+        XCTAssertEqual(host.stopCount, 0)
+        engine.stop()
+    }
+
+    func testClosingSafariCancelsUnconfirmedAccountRead() {
+        let host = FixtureTransport()
+        let engine = CodexSessionEngine(transportFactory: { host })
+        engine.connect()
+        host.reply("initialize", ["userAgent": "fixture"])
+        host.reply("account/read", ["account": NSNull(), "requiresOpenaiAuth": true])
+        engine.loginChatGPT()
+        host.reply("account/login/start", ["type": "chatgpt", "loginId": "login",
+                                             "authUrl": "https://chatgpt.com/auth"])
+        host.event("account/login/completed", ["loginId": "login", "success": true])
+        engine.browserDidClose()
+        XCTAssertEqual(host.stopCount, 1)
+        XCTAssertNil(engine.loginId)
+        XCTAssertEqual(engine.state, .idle)
+    }
+
+    func testRequestTimeoutNeverResendsTurn() async throws {
+        let host = FixtureTransport()
+        let engine = connected(host, timeout: 0.02)
+        engine.send(text: "hello")
+        host.reply("thread/start", ["thread": ["id": "thread"]])
+        let oldHandler = host.messageHandler!
+        let id = host.last("turn/start")["id"]!
+        try await Task<Never, Never>.sleep(nanoseconds: 100_000_000)
+        oldHandler(["id": id, "result": ["turn": turn("inProgress")]])
+        XCTAssertEqual(host.stopCount, 1)
+        XCTAssertEqual(engine.state, .failed)
+        XCTAssertNil(engine.turnId)
+        XCTAssertEqual(host.sent.filter { $0["method"] as? String == "turn/start" }.count, 1)
+    }
+
+    func testNonterminalTurnCompletedFailsClosed() {
+        let host = FixtureTransport()
+        let engine = streaming(host)
+        host.event("turn/completed", ["threadId": "thread", "turn": turn("inProgress")])
+        XCTAssertEqual(engine.state, .failed)
+        XCTAssertEqual(host.stopCount, 1)
+        XCTAssertNotNil(engine.errorMessage)
+    }
+
+    func testBackgroundStopsWithoutReconnect() {
+        let host = FixtureTransport()
+        let engine = streaming(host)
+        engine.movedToBackground()
+        XCTAssertEqual(host.stopCount, 1)
+        XCTAssertEqual(engine.state, .idle)
+        XCTAssertNil(engine.threadId)
+        XCTAssertFalse(engine.canSend)
+    }
+
+    func testOfficialURLBoundaryAndRedaction() {
+        for allowed in ["https://openai.com/auth", "https://auth.openai.com/a", "https://chatgpt.com:443/a"] {
+            XCTAssertNotNil(CodexWire.officialAuthorizationURL(allowed))
+        }
+        for denied in ["http://openai.com", "https://openai.com.evil.test", "https://evilopenai.com",
+                       "https://openai.com@evil.test", "https://user@openai.com", "https://openai.com:444/a",
+                       "https://openai.com./auth", "file:///openai.com"] {
+            XCTAssertNil(CodexWire.officialAuthorizationURL(denied))
+        }
+        let safe = CodexWire.safeError("error https://auth.openai.com/?code=sensitive a@b.com token=secretcode")
+        XCTAssertFalse(safe.contains("https://"))
+        XCTAssertFalse(safe.contains("a@b.com"))
+        XCTAssertFalse(safe.contains("secretcode"))
+        XCTAssertFalse(safe.contains("sensitive"))
+    }
+}
