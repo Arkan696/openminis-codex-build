@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "files": {
-    ".github/workflows/build-openminis-public.yml": "127121351fbdc12ebb7cae89970f2d23a12f8b04218e6371478b880461957d9b",
+    ".github/workflows/build-openminis-public.yml": "32a4d81797f61fc90af1c566e2767cff229171cf6bf84f80aac7e78344974c73",
     ".gitignore": "1b64a701ca18281ed76300a532f6e11a3c5eae6418d66d47dffba0275e060ce3",
     "APPLE-VALIDATION.md": "7e05dbef485aee680d6fbc2f54f9e8f99b8a85d94bee59e30d7ddcfadd40b072",
     "IPA-BUILD-PLAN.md": "3b5500648706ef408adab2590ec0e2053106fadff1717047c6924ffa04887618",
@@ -9,7 +9,7 @@
     "OVERLAY-README.md": "137c6cdd69e7e5f53a50cd871936d21c8bc18fb46d7d5ffa7390521c108cf7e9",
     "VERIFICATION-NOTES.md": "f069fe11a0328d5e2a2dab6ed21d75ff3636fad674ad2c547678a9d387d8d376",
     "VERIFICATION.json": "cae5b77630be6bd217c0f43beb3e653bd90b2017909aa10ab6e00f9984ca1d25",
-    "ci/build_openminis.sh": "74e7151a02fed33aa88451de72ee212908e3b386363ee2d8433a17796a61be47",
+    "ci/build_openminis.sh": "31c6c5e33e1d1f38f6cbbb2ef6ce46990a6f1a3972f512350462fa9603291199",
     "overlay/src/ios/CodexEngine/CodexEngineResources/README.md": "ee50ddf552d83cb5b8e4e94853b6d4b9de9f887a0bc7325a0caf47a6f013c0ec",
     "overlay/src/ios/CodexEngine/CodexEngineResources/text-only.toml": "81d1f268d529874409d315b95532d03ae092c488fdff8c7594609b1e3752afdd",
     "overlay/src/ios/CodexEngine/CodexProtocol.swift": "4cb03cf3de7def6c30177fb900ddfc66e26ad51ad17b9ac8b4200ced2355fbe2",

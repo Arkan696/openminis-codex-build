@@ -1,8 +1,5 @@
 name: Build OpenMinis public source
 on:
-  push:
-    branches: [master]
-    paths: ['.github/workflows/build-openminis-public.yml']
   workflow_dispatch:
     inputs:
       ref:
@@ -25,6 +22,12 @@ jobs:
         env:
           REQUESTED_REF: ${{ inputs.ref || '1a71df0f381cefde80bf912b723de6f9831bc177' }}
         run: test "$REQUESTED_REF" = "1a71df0f381cefde80bf912b723de6f9831bc177"
+      - name: Set pinned Go toolchain
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.5'
+          check-latest: false
+          cache: false
       - name: Build unsigned public app
         run: bash ci/build_openminis.sh
       - name: Upload unsigned app artifact

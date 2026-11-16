@@ -13,10 +13,15 @@ EXPECTED=1a71df0f381cefde80bf912b723de6f9831bc177
 python3 "$ROOT/scripts/check_public_build_inputs.py"
 xcodebuild -version
 xcrun --sdk iphoneos --show-sdk-version
-brew install ninja llvm lld libarchive pkg-config meson go
+# setup-go selects the exact version before this step. Homebrew must not
+# upgrade it: the pinned go-json-experiment dependency breaks with Go 1.27.
+brew install ninja llvm lld libarchive pkg-config meson
 export PATH="$(brew --prefix llvm)/bin:$(brew --prefix lld)/bin:$PATH"
+export GOTOOLCHAIN=local
+export GOEXPERIMENT=nojsonv2
 for cmd in meson ninja clang ld.lld pkg-config go; do command -v "$cmd"; done
-python3 -c 'import subprocess;v=subprocess.check_output(["go","env","GOVERSION"],text=True).strip();assert tuple(int(x) for x in v.removeprefix("go").split(".")[:3])>=(1,25,5),v'
+python3 -c 'import subprocess;v=subprocess.check_output(["go","env","GOVERSION"],text=True).strip();assert v=="go1.25.5", "Expected go1.25.5, got "+v'
+go version
 if ! xcrun --sdk iphoneos metal --version; then
   xcodebuild -downloadComponent MetalToolchain
   xcrun --sdk iphoneos metal --version
@@ -33,6 +38,13 @@ git -C "$UPSTREAM" submodule update --init --recursive deps/ish
 python3 "$ROOT/scripts/apply_overlay.py" --repo "$UPSTREAM" --apply
 python3 "$ROOT/scripts/prepare_ipa_build.py" --repo "$UPSTREAM" --disposable-copy
 cd "$UPSTREAM"
+# Fail before rebuilding the large native libraries if the pinned JSON module
+# cannot compile with the selected Go toolchain. This probe builds, never runs.
+(
+  cd deps/rclone-mobile
+  echo '== Go JSON dependency compile preflight (no execution) =='
+  go build -mod=readonly github.com/go-json-experiment/json
+)
 ./deps/build_lame.sh
 ./deps/build_ffmpeg.sh
 ./deps/build_ish.sh release
