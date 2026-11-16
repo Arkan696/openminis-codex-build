@@ -1,6 +1,6 @@
 {
   "upstream_commit": "1a71df0f381cefde80bf912b723de6f9831bc177",
-  "overlay_commit_before_verification": "e01a5d943f2243f8caa5f3d18c6675c9757206f9",
+  "overlay_commit_before_verification": "15b68c5f20abe7aa432080896f1f18cdea7f9d98",
   "local_checks_passed": [
     "objc_ios16_5_strict_syntax",
     "c_ios16_5_object_compile",
@@ -8,7 +8,10 @@
     "c_framer_runtime_via_ctypes",
     "profile_toml_ephemeral_and_disabled_features",
     "python_git_pbx_runtime_fixture_tests",
-    "apple_validation_generator_and_failure_report_tests"
+    "apple_validation_generator_and_failure_report_tests",
+    "independent_build_sync_guards",
+    "provider_system_paste_source_copy_tests",
+    "local_signed_ipa_pipeline_tests"
   ],
   "local_test_log": "build/verification.log",
   "checked_source_sha256": {
@@ -19,7 +22,8 @@
     "overlay/src/ios/CodexEngine/OMCodexProcessHost.m": "66bdc713747ab691020f2806862bc49b202ec4b780769723014fc3ce9bce1304",
     "overlay/src/ios/CodexEngine/CodexSessionView.swift": "9919031ae83148ea63add9e0f59fdccbed098296c9a0141e885e5aed00881ae7",
     "overlay/src/ios/CodexEngine/OMCodexFramer.c": "7de30dd464baf6599992ea0543e36f92012091d8c51e43ad19bc4b9b79fc205c",
-    "tests/swift-fixture/CodexSessionEngineTests.swift": "642006bd8feff63bdef4fa9659827ea35f3b2e6f7934a2eea7e1e1ebcd96b3fa"
+    "overlay/src/ios/CodexEngine/OMProviderPaste.swift": "84e1be66a9475fe9fadc071eb42b75d625e81854be512d0e4ffc81a83fbbd752",
+    "tests/swift-fixture/CodexSessionEngineTests.swift": "3d5bc1943b9702c3c7c1b3936a3520ec9a499e23de21c046e7fcf85c27f66bfd"
   },
   "runtime_executed": false,
   "swift_typechecked": false,
@@ -30,6 +34,6 @@
   "runtime_signature_authenticated": false,
   "apple_validation_project_generator_tested": true,
   "apple_validation_project_built": false,
-  "swift_fixture_cases_defined_not_executed": 16,
-  "python_tool_test_cases_passed": 26
+  "swift_fixture_cases_defined_not_executed": 24,
+  "python_tool_test_cases_passed": 41
 }
