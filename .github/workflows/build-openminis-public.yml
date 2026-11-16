@@ -1,5 +1,8 @@
 name: Build OpenMinis public source
 on:
+  push:
+    branches: [master]
+    paths: ['.github/workflows/build-openminis-public.yml']
   workflow_dispatch:
     inputs:
       ref:
@@ -20,7 +23,7 @@ jobs:
           fetch-depth: 1
       - name: Validate fixed source commit
         env:
-          REQUESTED_REF: ${{ inputs.ref }}
+          REQUESTED_REF: ${{ inputs.ref || '1a71df0f381cefde80bf912b723de6f9831bc177' }}
         run: test "$REQUESTED_REF" = "1a71df0f381cefde80bf912b723de6f9831bc177"
       - name: Build unsigned public app
         run: bash ci/build_openminis.sh

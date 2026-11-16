@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "files": {
-    ".github/workflows/build-openminis-public.yml": "230a409ca657e3560a8d52519ad52ce28dab81c0517ad47b894a6764c525a317",
+    ".github/workflows/build-openminis-public.yml": "127121351fbdc12ebb7cae89970f2d23a12f8b04218e6371478b880461957d9b",
     ".gitignore": "1b64a701ca18281ed76300a532f6e11a3c5eae6418d66d47dffba0275e060ce3",
     "APPLE-VALIDATION.md": "7e05dbef485aee680d6fbc2f54f9e8f99b8a85d94bee59e30d7ddcfadd40b072",
     "IPA-BUILD-PLAN.md": "3b5500648706ef408adab2590ec0e2053106fadff1717047c6924ffa04887618",
