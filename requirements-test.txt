@@ -1,0 +1,2 @@
+# Used only by tests/test_overlay_tools.py; not needed by the overlay/app at runtime.
+openstep-parser==2.0.3

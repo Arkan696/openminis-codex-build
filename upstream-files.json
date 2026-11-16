@@ -1,0 +1,9 @@
+{
+  "commit": "1a71df0f381cefde80bf912b723de6f9831bc177",
+  "files": {
+    "src/ios/Minis.xcodeproj/project.pbxproj": "b3380010c3e77cd36f9b251b15d65c8f733b380f",
+    "src/ios/MinisApp-Bridging-Header.h": "9a8b183a8043f2451ed4c800add573123a135c52",
+    "src/ios/Views/ContentView/ContentView.swift": "2f76a8c7319be0e3b32cce582ba54fce97a594f3",
+    "src/ios/Views/ContentView/ContentView+SidebarToolbar.swift": "027266073cda09e943dd2e8a0e5dabd981475f83"
+  }
+}

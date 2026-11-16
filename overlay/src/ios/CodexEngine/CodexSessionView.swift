@@ -51,7 +51,7 @@ struct CodexSessionView: View {
             Text(engine.state.title).font(.headline)
             Text("临时登录 · 仅当前前台核心有效。停止、新对话、关闭页面或进入后台后需重新登录。")
                 .font(.caption).foregroundColor(.secondary)
-            Text("纯文本安全模式：只读沙箱，无 OpenMinis 工具。首版不导入原会话历史。")
+            Text("纯文本安全配置：Codex 工作目录只读、OpenMinis 工具不接入；临时目录不等于 iOS 内核安全沙箱。首版不导入原会话历史。")
                 .font(.caption).foregroundColor(.secondary)
             if let error = engine.errorMessage {
                 Text(error).font(.callout).foregroundColor(.red).textSelection(.enabled)

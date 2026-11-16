@@ -37,7 +37,8 @@ static BOOL OMSafeEnvelope(NSDictionary *m){
  if([method isEqual:@"thread/start"]){
   NSSet *keys=[NSSet setWithArray:@[@"cwd",@"sandbox",@"approvalPolicy",@"ephemeral",@"environments"]];
   for(id key in p)if(![keys containsObject:key])return NO;
-  return p.count==5 && [p[@"cwd"] isKindOfClass:NSString.class] && [p[@"cwd"] hasPrefix:@"/"] && [p[@"sandbox"] isEqual:@"read-only"] && [p[@"approvalPolicy"] isEqual:@"untrusted"] && [p[@"ephemeral"] isEqual:@YES] && [p[@"environments"] isEqual:@[]];
+  if(p.count!=5)return NO;
+  return [p[@"cwd"] isKindOfClass:NSString.class] && [p[@"cwd"] hasPrefix:@"/"] && [p[@"sandbox"] isEqual:@"read-only"] && [p[@"approvalPolicy"] isEqual:@"untrusted"] && [p[@"ephemeral"] isEqual:@YES] && [p[@"environments"] isEqual:@[]];
  }
  if([method isEqual:@"turn/start"]){
   NSSet *keys=[NSSet setWithArray:@[@"threadId",@"input",@"environments",@"approvalPolicy",@"sandboxPolicy"]];
@@ -50,8 +51,9 @@ static BOOL OMSafeEnvelope(NSDictionary *m){
   return [item isKindOfClass:NSDictionary.class] && [item[@"type"] isEqual:@"text"] && [item[@"text"] isKindOfClass:NSString.class] && [item[@"text"] length]<=32768 && [item[@"text_elements"] isEqual:@[]];
  }
  if([method isEqual:@"turn/interrupt"])return p.count==2 && [p[@"threadId"] isKindOfClass:NSString.class] && [p[@"turnId"] isKindOfClass:NSString.class];
- return YES;
- return YES;
+ if([method isEqual:@"account/logout"])return p.count==0;
+ if([method isEqual:@"account/login/cancel"])return p.count==1 && [p[@"loginId"] isKindOfClass:NSString.class];
+ return NO;
 }
 @interface OMCodexProcessHost () {
  NSCondition *_lock;
@@ -98,7 +100,7 @@ static BOOL OMSafeEnvelope(NSDictionary *m){
  BOOL valid=fd>=0 && fstat(fd,&st)==0 && S_ISREG(st.st_mode) && read(fd,&h,sizeof(h))==sizeof(h) && h.magic==MH_MAGIC_64 && h.cputype==CPU_TYPE_ARM64 && h.filetype==MH_EXECUTE;
  if(fd>=0)close(fd);
  NSString *canonical=[exe stringByResolvingSymlinksInPath];
- if(!valid || ![canonical hasPrefix:[bundle.bundlePath.stringByResolvingSymlinksInPath stringByAppendingString:@"/"]] || access(exe.fileSystemRepresentation,X_OK)!=0){*error=OMError(5,@"CodexRuntime/codex must be a signed executable ARM64 iOS Mach-O inside this bundle");return NO;}
+ if(!valid || ![canonical hasPrefix:[bundle.bundlePath.stringByResolvingSymlinksInPath stringByAppendingString:@"/"]] || access(exe.fileSystemRepresentation,X_OK)!=0){*error=OMError(5,@"CodexRuntime/codex must be an executable ARM64 Mach-O inside this bundle; signature and device compatibility require separate validation");return NO;}
  NSString *ca=[dir stringByAppendingPathComponent:@"ca-certificates.crt"];
  NSData *pem=[NSData dataWithContentsOfFile:ca];unsigned char digest[CC_SHA256_DIGEST_LENGTH];
  if(!pem.length || pem.length>1024*1024){*error=OMError(6,@"Bundled CA missing or oversized; verification will not be disabled");return NO;}
@@ -106,6 +108,9 @@ static BOOL OMSafeEnvelope(NSDictionary *m){
  if(![hex isEqual:@"427c064216761a1e72a8b30f0d954d08cb6e4435a82091fb865afd20c8497285"]){*error=OMError(7,@"Bundled Mozilla CA integrity mismatch");return NO;}
  NSData *profile=[NSData dataWithContentsOfFile:[dir stringByAppendingPathComponent:@"text-only.toml"]];
  if(!profile.length || profile.length>16384){*error=OMError(8,@"Bundled text-only profile unavailable");return NO;}
+ CC_SHA256(profile.bytes,(CC_LONG)profile.length,digest);[hex setString:@""];
+ for(int i=0;i<CC_SHA256_DIGEST_LENGTH;i++)[hex appendFormat:@"%02x",digest[i]];
+ if(![hex isEqual:@"81d1f268d529874409d315b95532d03ae092c488fdff8c7594609b1e3752afdd"]){*error=OMError(8,@"Text-only ephemeral profile integrity mismatch");return NO;}
  *runtime=dir;return YES;
 }
 - (NSString *)makeWorkspace:(NSString *)runtime error:(NSError **)error {
@@ -133,8 +138,13 @@ static BOOL OMSafeEnvelope(NSDictionary *m){
  _used=YES;_workerActive=YES;
  int wake[2]={-1,-1};
  if(pipe(wake)!=0){_workerActive=NO;[_lock unlock];completion(OMPosix(errno,@"wake pipe"));return;}
+ int setupError=0;
+ for(int i=0;i<2;i++){
+  int flags=fcntl(wake[i],F_GETFL,0);
+  if(flags<0 || fcntl(wake[i],F_SETFD,FD_CLOEXEC)<0 || fcntl(wake[i],F_SETFL,flags|O_NONBLOCK)<0){setupError=errno;break;}
+ }
+ if(setupError){close(wake[0]);close(wake[1]);_workerActive=NO;[_lock unlock];completion(OMPosix(setupError,@"wake pipe flags"));return;}
  _wakeRead=wake[0];_wakeWrite=wake[1];
- for(int i=0;i<2;i++){fcntl(wake[i],F_SETFD,FD_CLOEXEC);fcntl(wake[i],F_SETFL,O_NONBLOCK);}
  [_lock unlock];
  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY,0),^{@autoreleasepool{[self runWithBundle:bundle completion:completion];}});
 }
@@ -153,6 +163,13 @@ static BOOL OMPipe(int fds[2],NSError **error){
  char **envp=NULL;
  do {
   if(!OMPipe(p[0],error)||!OMPipe(p[1],error)||!OMPipe(p[2],error))break;
+  BOOL pipeFlagsOK=fcntl(p[0][1],F_SETNOSIGPIPE,1)==0;
+  int parentFDs[3]={p[0][1],p[1][0],p[2][0]};
+  for(int i=0;i<3 && pipeFlagsOK;i++){
+   int flags=fcntl(parentFDs[i],F_GETFL,0);
+   if(flags<0 || fcntl(parentFDs[i],F_SETFL,flags|O_NONBLOCK)<0)pipeFlagsOK=NO;
+  }
+  if(!pipeFlagsOK){*error=OMPosix(errno,@"parent pipe flags");break;}
   int e=posix_spawn_file_actions_init(&actions);if(e){*error=OMPosix(e,@"spawn actions");break;}aOK=YES;
   e=posix_spawnattr_init(&attr);if(e){*error=OMPosix(e,@"spawn attributes");break;}tOK=YES;
   e=posix_spawn_file_actions_adddup2(&actions,p[0][0],STDIN_FILENO);
@@ -176,10 +193,7 @@ static BOOL OMPipe(int fds[2],NSError **error){
  if(envp){for(NSUInteger i=0;envp[i];i++){memset(envp[i],0,strlen(envp[i]));free(envp[i]);}free(envp);}
  if(aOK)posix_spawn_file_actions_destroy(&actions);if(tOK)posix_spawnattr_destroy(&attr);
  for(int i=0;i<3;i++)for(int j=0;j<2;j++)if(p[i][j]>=0)close(p[i][j]);
- if(pid>0){
-  fcntl(*inFD,F_SETNOSIGPIPE,1);
-  for(int fdIndex=0;fdIndex<3;fdIndex++){int fd=fdIndex==0?*inFD:(fdIndex==1?*outFD:*errFD);fcntl(fd,F_SETFL,fcntl(fd,F_GETFL,0)|O_NONBLOCK);}
- }return pid;
+ return pid;
 }
 - (BOOL)writeLine:(NSData *)line fd:(int)fd {
  const uint8_t *p=line.bytes;NSUInteger pos=0;double until=OMNow()+3;
@@ -255,11 +269,24 @@ static bool OMFramedLine(const unsigned char *p,size_t n,void *owner){return [(_
     // NDJSON. Drain to EOF/EAGAIN before leaving this worker; otherwise a final
     // item/completed or turn/completed can be lost.
     BOOL outDone=NO,errDone=NO;
-    while(!outDone || !errDone){
-     if(!outDone){char tail[8192];ssize_t n;while((n=read(output,tail,sizeof(tail)))>0){if(!OMCodexFramerFeed(&framer,tail,(size_t)n,OMFramedLine,(__bridge void *)self)){error=OMError(11,@"Invalid or oversized protocol output");outDone=YES;break;}}if(n==0 || (n<0 && errno!=EAGAIN && errno!=EWOULDBLOCK))outDone=YES;}
-     if(!errDone){char tail[4096];ssize_t n;while((n=read(err,tail,sizeof(tail)))>0){}if(n==0 || (n<0 && errno!=EAGAIN && errno!=EWOULDBLOCK))errDone=YES;}
-     if(!outDone || !errDone){struct pollfd tailPoll[2]={{output,POLLIN,0},{err,POLLIN,0}};poll(tailPoll,2,50);}
+    double drainDeadline=OMNow()+1.0;
+    while((!outDone || !errDone) && OMNow()<drainDeadline && ![self shouldStop]){
+     if(!outDone){
+      char tail[8192];ssize_t n=-1;size_t budget=65536;
+      while(budget && (n=read(output,tail,MIN(sizeof(tail),budget)))>0){
+       budget-=(size_t)n;
+       if(!OMCodexFramerFeed(&framer,tail,(size_t)n,OMFramedLine,(__bridge void *)self)){error=OMError(11,@"Invalid or oversized protocol output");outDone=YES;break;}
+      }
+      if(n==0 || (n<0 && errno!=EAGAIN && errno!=EWOULDBLOCK && errno!=EINTR))outDone=YES;
+     }
+     if(!errDone){
+      char tail[4096];ssize_t n=-1;size_t budget=65536;
+      while(budget && (n=read(err,tail,MIN(sizeof(tail),budget)))>0)budget-=(size_t)n;
+      if(n==0 || (n<0 && errno!=EAGAIN && errno!=EWOULDBLOCK && errno!=EINTR))errDone=YES;
+     }
+     if(!outDone || !errDone){struct pollfd tailPoll[2]={{outDone?-1:output,POLLIN,0},{errDone?-1:err,POLLIN,0}};poll(tailPoll,2,50);}
     }
+    if(!outDone || !errDone)[self diagnostic:@"Tail-drain deadline reached; residual pipe data was not treated as a successful protocol completion."];
     break;
    }
   }}

@@ -1,40 +1,126 @@
 #!/usr/bin/env python3
-"""Apply the reviewed Codex overlay to a full OpenMinis checkout.
-
-This script is intentionally opt-in and defaults to --dry-run. It expects a
-macOS/Xcode checkout at --repo, a user-authorized CodexRuntime directory, and
-will refuse if the OpenMinis commit or main target does not match the audit.
-It does not upload files, read Keychain, or copy user credentials.
-"""
+"""Apply the pinned source overlay locally; dry-run by default, no signing/network."""
 from pathlib import Path
-import argparse, hashlib, plistlib, shutil, subprocess, sys
-EXPECTED='1a71df0f381cefde80bf912b723de6f9831bc177'
-ROOT=Path(__file__).resolve().parents[1]
-def run(cmd,cwd):return subprocess.run(cmd,cwd=cwd,text=True,capture_output=True)
-def die(msg):raise SystemExit('REFUSED: '+msg)
-ap=argparse.ArgumentParser();ap.add_argument('--repo',type=Path,required=True);ap.add_argument('--runtime',type=Path,required=True);ap.add_argument('--apply',action='store_true');a=ap.parse_args();repo=a.repo.resolve();runtime=a.runtime.resolve()
-if not (repo/'src/ios/Minis.xcodeproj/project.pbxproj').is_file():die('not an OpenMinis checkout')
-git=run(['git','rev-parse','HEAD'],repo)
-if git.returncode or git.stdout.strip()!=EXPECTED:die(f'expected fixed commit {EXPECTED}, got {git.stdout.strip()!r}')
-pbx=(repo/'src/ios/Minis.xcodeproj/project.pbxproj').read_text()
-if 'PRODUCT_BUNDLE_IDENTIFIER = com.openminis.app;' not in pbx or pbx.count('IPHONEOS_DEPLOYMENT_TARGET = 16.0;')<2:die('main target audit markers missing')
-for name in ['codex','ca-certificates.crt','text-only.toml']:
- p=runtime/name
- if not p.is_file():die(f'missing runtime resource {p}')
-if not (runtime/'codex').stat().st_mode & 0o111:die('runtime codex is not executable')
-print('target commit:',EXPECTED,'main target baseline: iOS16/Swift5')
-print('overlay files:',len(list((ROOT/'overlay/src/ios/CodexEngine').rglob('*'))))
-print('runtime resources:',runtime)
-if not a.apply:
- print('DRY RUN: no files changed. Pass --apply only from a reviewed macOS checkout.')
- raise SystemExit(0)
-# Copy source overlay; PBX edits remain a deliberate review step because Xcode may
-# be using synchronized groups in a different local checkout.
-dst=repo/'src/ios/CodexEngine';dst.mkdir(parents=True,exist_ok=True)
-for p in (ROOT/'overlay/src/ios/CodexEngine').iterdir():
- if p.name=='CodexEngineResources':continue
- if p.is_file():shutil.copy2(p,dst/p.name)
-res=dst/'CodexEngineResources';res.mkdir(exist_ok=True)
-for p in (runtime/'codex',runtime/'ca-certificates.crt',runtime/'text-only.toml'):
- shutil.copy2(p,res/p.name)
-print('Applied source/resource overlay. Add files to the Minis target in Xcode, then build the native dependencies and run tests.')
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+from overlay_lib import (ROOT, EXPECTED, AFFECTED, FILES, SOURCE, PROFILE,
+                         Refused, baseline, transform, integration_patch, validate_runtime)
+
+def git(repo, *args, **kwargs):
+    return subprocess.run(['git', *args], cwd=repo, capture_output=True, **kwargs)
+
+def verify_checkout(repo):
+    head = git(repo, 'rev-parse', '--show-toplevel', text=True)
+    if head.returncode or Path(head.stdout.strip()).resolve() != repo:
+        raise Refused('Expected the root of a full OpenMinis Git checkout')
+    rev = git(repo, 'rev-parse', 'HEAD', text=True)
+    if rev.returncode or rev.stdout.strip() != EXPECTED:
+        raise Refused('Expected upstream commit ' + EXPECTED)
+    status = git(repo, 'status', '--porcelain', '--untracked-files=all', text=True)
+    if status.returncode or status.stdout.strip():
+        raise Refused('Checkout has local changes; commit/stash them before applying')
+    return baseline(repo)
+
+def plan(repo, runtime=None):
+    inputs = baseline(repo)
+    patch = integration_patch(inputs)
+    if patch != (ROOT/'patches/openminis-codex-integration.patch').read_text():
+        raise Refused('Bundled patch differs from generated transformation')
+    check = git(repo, 'apply', '--check', '-', input=patch.encode())
+    if check.returncode:
+        raise Refused('Git rejected integration patch; nothing applied')
+    destination = repo/'src/ios/CodexEngine'
+    if destination.exists() or destination.is_symlink():
+        raise Refused('CodexEngine already exists; overlay will not overwrite it')
+    resources = validate_runtime(runtime) if runtime is not None else None
+    return inputs, patch, resources
+
+def atomic_write(path, data):
+    fd, name = tempfile.mkstemp(prefix='.codex-rollback-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'wb') as f:
+            f.write(data)
+        os.replace(name, path)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+
+def apply_transaction(repo, inputs, patch, runtime=None):
+    """Testable write transaction. CLI checks exact HEAD/clean status separately."""
+    target = repo/'src/ios/CodexEngine'
+    if target.exists() or target.is_symlink():
+        raise Refused('Refusing to overwrite an existing engine directory')
+    expected = transform(inputs)
+    stage = Path(tempfile.mkdtemp(prefix='.codex-stage-', dir=target.parent))
+    moved = False
+    try:
+        for name in FILES:
+            shutil.copyfile(SOURCE/name, stage/name)
+        resource = stage/'CodexRuntime'
+        resource.mkdir()
+        shutil.copyfile(PROFILE, resource/'text-only.toml')
+        shutil.copyfile(SOURCE/'CodexEngineResources/README.md', resource/'README.md')
+        if runtime is not None:
+            metadata = validate_runtime(runtime)
+            for name in metadata:
+                shutil.copyfile(Path(runtime)/name, resource/name)
+                (resource/name).chmod(0o755 if name in ('codex','codex-code-mode-host') else 0o644)
+            validate_runtime(resource)
+            (resource/'runtime-manifest.json').write_text(json.dumps(metadata, indent=2)+'\n')
+        if baseline(repo) != inputs:
+            raise Refused('Source changed while staging; nothing applied')
+        checked = git(repo, 'apply', '--check', '-', input=patch.encode())
+        if checked.returncode:
+            raise Refused('Patch check failed after staging')
+        os.replace(stage, target)
+        moved = True
+        applied = git(repo, 'apply', '-', input=patch.encode())
+        if applied.returncode:
+            raise Refused('Git failed to apply the integration patch')
+        for rel in AFFECTED:
+            if (repo/rel).read_text() != expected[rel]:
+                raise Refused('Concurrent edit or incomplete apply: ' + rel)
+    except BaseException:
+        # Undo ONLY bytes generated by us. Never replace concurrent user edits.
+        for rel, original in inputs.items():
+            p = repo/rel
+            if p.is_file() and p.read_text() == expected[rel]:
+                atomic_write(p, original.encode())
+        if moved:
+            shutil.rmtree(target)
+        raise
+    finally:
+        if stage.exists():
+            shutil.rmtree(stage)
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('--repo', type=Path, required=True)
+    ap.add_argument('--runtime', type=Path, help='Optional locally authorized CodexRuntime; never downloaded')
+    ap.add_argument('--apply', action='store_true', help='Apply source/project patch to a clean checkout')
+    args = ap.parse_args(argv)
+    repo = args.repo.resolve()
+    try:
+        verify_checkout(repo)
+        inputs, patch, resources = plan(repo, args.runtime)
+        print('Pinned OpenMinis:', EXPECTED)
+        print('Main target: 5 compiled sources + 2 header references + CodexRuntime folder')
+        print('Deployment targets, signing settings, Bundle IDs and provider config: unchanged')
+        print('Runtime:', 'locally validated; signature NOT authenticated' if resources else 'absent; Connect will refuse to launch')
+        if not args.apply:
+            print('DRY RUN: no files changed. Use --apply only after reviewing the patch.')
+            return 0
+        apply_transaction(repo, inputs, patch, args.runtime)
+        print('APPLIED: source/project/UI overlay. No core executed, credentials read or network used.')
+        print('Still required: Swift/Xcode build, separate test-app identity, runtime signing and device tests.')
+        return 0
+    except (Refused, OSError) as error:
+        print('REFUSED:', str(error))
+        return 1
+
+if __name__ == '__main__':
+    raise SystemExit(main())

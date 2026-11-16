@@ -1,44 +1,73 @@
-# OpenMinis Codex overlay（源码草案）
+# OpenMinis Codex 源码补丁 · 本地验证版
 
-针对 OpenMinis 固定 commit `1a71df0f381cefde80bf912b723de6f9831bc177`。目标 iOS16.5/TrollStore。此 overlay 未修改 `/var/minis/workspace/openminis-research/src/ios`，未安装或启动 Codex，不含用户二进制、密钥、auth.json 或会话数据。
+目标：iOS16.5 / TrollStore；固定 OpenMinis commit `1a71df0f381cefde80bf912b723de6f9831bc177`。用户已批准独立 CodexSessionEngine 架构。该版本有实际源代码、工程补丁和测试，但**不是 IPA/TIPA，也没有完成 Swift/Xcode 编译或真机验证**。
 
-## overlay 内容
+第一切片在 OpenMinis 侧栏工具菜单增加“Codex 独立会话”，使用独立 SwiftUI 页面和 app-server，不进入 OpenMinis 的 `runAgentLoop`，不迁移其消息数据库/凭据。仅手动连接和发送；关闭页面、进入后台、超时会停止当前核心。OAuth 在系统 Safari 页面完成，账户以核心响应确认。
 
-- `OMCodexFramer.h/.c`：有限长度/总量、CRLF、跨 chunk 和逐字节 UTF-8 NDJSON 分帧。
-- `OMCodexProcessHost.h/.m`：bundle 内 ARM64 iOS Mach-O 校验、固定 CA 摘要、独立临时 workspace、三管道、白名单环境、出站 RPC allowlist、意外请求 fail-closed、进程组终止/单 owner waitpid。
-- `CodexProtocol.swift`：Codex 事件/状态、官方 OAuth URL 校验、错误脱敏。
-- `CodexSessionEngine.swift`：独立 engine 状态机草案；线程 cwd 由 per-session workspace 的 `empty` 子目录提供，不修改 OpenMinis 进程 cwd。Codex 官方 RPC 的 payload/事件字段仍待 Xcode XCTest 与真实核心端到端验证。
-- `CodexSessionView.swift`：iOS16 SwiftUI standalone 页面和 App 内系统 Safari OAuth。
-- `CodexEngineResources/text-only.toml`：ephemeral认证、MCP/shell/图像/目录发现等功能禁用。用户授权的 codex Mach-O 和 CA 不随 overlay 公开。
-- `tests/test_framer.c` 和 `tests/swift-fixture/CodexSessionEngineTests.swift`：C 可本机运行；Swift XCTest 仅供 Mac/Xcode 加入 XCTest target。
+## 本轮完成
 
-## 本机验证结果
+- `patches/openminis-codex-integration.patch`：五个编译源（3 Swift、1 ObjC、1 C）、两个头文件引用、CodexRuntime 文件夹资源、bridge import、统一 ToolSheet 菜单入口。头文件不进入 Sources 编译列表。新增 PBX ID 是确定性24位十六进制，解析后确认仅修改主目标相关的三个对象；原有签名、Bundle ID、deployment target、provider配置和扩展配置保持不变。
+- `scripts/apply_overlay.py`：统一应用入口。默认 dry-run，拒绝错误提交、脏工作区、已有引擎目录、上游关键文件哈希不符；先准备独立目录，再应用同一份工程补丁，失败回滚本工具写入的内容，不覆盖并发用户修改。`apply_ui_overlay.py` 仅为同一入口的兼容别名。不要先应用旧的 `openminis-codex-ui.patch` 再应用完整补丁，完整补丁已经包含UI修改。
+- `scripts/prepare_codex_runtime.py`：本地流式读取用户授权 deb，只提取两个指定的普通 Mach-O 文件，拒绝链接/重复/超大/路径穿越/错误设备平台；校验固定公开 Mozilla CA、使用审阅过的 ephemeral 配置；成功后原子发布输出目录，失败不留下看似完整的 runtime。不下载、不上传、不运行核心，不提取 deb 中的配置或 auth.json。
+- `OMCodexProcessHost`：单owner进程、固定RPC参数allowlist、独立HOME/CODEX_HOME、NDJSON三管道、未实现请求断开、停止清理；配置和CA摘要检查，尾部排空有时限，父端管道标志在spawn前完成检查。底层签名是否有效仍由单独验收判断。
+- `tests/test_overlay_tools.py`：13项 Python/Git/PBX/合成deb 实际测试；`overlay/tests/test_framer.c` 通过本机 shared-ELF/ctypes 运行；Swift XCTest fixture 已写，尚未执行。
 
-```text
-OMCodexProcessHost.m: clang -target arm64-apple-ios16.5 -fsyntax-only PASSED (strict fixed RPC schema + tail-pipe drain)
-OMCodexFramer.c: iOS16.5 ARM64 object compile PASSED; shared-ELF runtime boundary tests PASSED
-OMCodexFramer C runtime unit test: PASSED (executed as shared ELF via Python ctypes)
-text-only.toml: Python tomllib parser PASSED
-Swift: NOT TYPECHECKED (本机无 swift/swiftc/Xcode)
-OpenMinis PBX/Xcode build: NOT PERFORMED
-TrollStore/iOS device: NOT INSTALLED OR TESTED
-```
+## 验证事实
 
-Swift test fixture记录了 initialize、OAuth URL/loginId、thread/turn隔离参数、delta/final、interrupt、迟到回调、超时与后台停止；没有 XCTest 跑测结果。
+| 项目 | 结果 |
+|---|---|
+| ObjC iOS16.5 `-Werror -fsyntax-only` | 通过 |
+| C iOS16.5 ARM64 object编译、本机分帧执行 | 通过 |
+| ephemeral profile TOML和摘要 | 通过 |
+| PBX解析、只增加正确主target编译/资源项 | 通过 |
+| Git应用、dry-run不写入、失败回滚、重复应用拒绝 | 通过 |
+| 合成deb提取/错误/链接/平台/配置拒绝 | 通过 |
+| Swift typecheck / XCTest | 未进行 |
+| Xcode打开、OpenMinis依赖/全App构建 | 未进行 |
+| Runtime签名认证、Codex核心执行、真机测试 | 未进行 |
+| IPA/TIPA生成 | 未进行 |
 
-## Xcode 应用步骤
+详情见 `VERIFICATION.json`。PBX解析不等于Xcode构建，合成56字节Mach-O测试文件不包含可运行核心。现有 OpenMinis 研究树与 Codex Pocket 均未改动。
+
+## 本地验证复现
+
+Python需要3.11+；测试额外依赖纯Python解析器：
 
 ```sh
-python3 scripts/apply_overlay.py --repo /path/to/OpenMinis --runtime /path/to/authorized/CodexRuntime
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-test.txt
+.venv/bin/python scripts/verify_local.py \
+  --baseline /path/to/audited/OpenMinis \
+  --ca-bundle /path/to/public/mozilla-ca.pem \
+  --sdk /path/to/iPhoneOS.sdk --cc clang
 ```
 
-仅dry-run。生产应用脚本会校验commit `1a71df0f381cefde80bf912b723de6f9831bc177` 和 iOS16主target；默认不执行修改。Mac/Xcode 人工审阅确认后：
+这里需要能交叉编译iOS的Clang和SDK；手机本次使用clang19/Theos iPhoneOS16.5目录（元数据16.4）。不会生成可执行iOS App。测试日志写入build/，不得从日志推断真实账户或端点已通过。
 
-1. 将 `overlay/src/ios/CodexEngine` 代码文件加入 **Minis主App target**，并仅添加主 App 需要的系统 framework。
-2. 把 bridging header `#import "CodexEngine/OMCodexProcessHost.h"` 加到主target现有 `MinisApp-Bridging-Header.h`。
-3. 将经用户授权的 `CodexRuntime/codex`、`ca-certificates.crt`、`text-only.toml` 放到独立 bundle Resources subgroup，不放进 iSH rootfs。
-4. 在 `ContentView` 工具菜单增加“Codex 独立会话”，sheet 显示 `CodexSessionView()`；不能调用 `AIChatViewModel.runAgentLoop`。打开前必须由 UI 显式用户操作。
-5. 添加 `CodexSessionEngineTests.swift` 到独立 XCTest target，先纯 mock 验证 Swift 协议；接着完整依赖 build、App install、TrollStore 真机测试。
-6. LICENSE/第三方 notices 与修改源码/分发义务单独核对。
+## 应用与Mac验收
 
-不要因Theos SDK名为iPhoneOS16.5就认为其等同完整Xcode SDK；它元数据为16.4。本机没有macOS、Swift、Xcode和OpenMinis native deps，因此无法生成可信OpenMinis TIPA。现有 Codex Pocket 保持不动。
+先在完整、干净的固定提交checkout上预览，源码应用不需要runtime：
+
+```sh
+python3 scripts/apply_overlay.py --repo /path/to/OpenMinis
+python3 scripts/apply_overlay.py --repo /path/to/OpenMinis --apply
+```
+
+源码模式会放置profile但不包含Codex，连接会明确拒绝。若有已授权本地runtime，可在应用时添加 `--runtime /path/to/CodexRuntime`。必须在应用前准备runtime，不能重复覆盖已应用的目录。
+
+```sh
+python3 scripts/prepare_codex_runtime.py \
+  --deb /path/to/user-supplied.deb \
+  --ca-bundle /path/to/public/mozilla-ca.pem \
+  --out /path/to/local/CodexRuntime --authorized
+```
+
+`--authorized`只确认本地使用，不证明再分发许可。Mozilla CA固定摘要 `427c064216761a1e72a8b30f0d954d08cb6e4435a82091fb865afd20c8497285`；profile摘要由宿主固定，修改profile后必须重新审阅和同步。
+
+**安装前尚需**：先构建原OpenMinis和原生依赖，设置独立测试App/扩展身份与app groups，避免覆盖现有Minis；审阅TrollStore签名/嵌套Mach-O权限与框架链接；运行Swift类型检查及XCTest，再测版本/握手/OAuth/文本回合/取消/后台/断网。工具MCP、Shell和文件修改不在本切片范围。不能凭Codex配置保证整个高权限进程的内核级隔离。
+
+## 许可与边界
+
+本补丁原创代码按文件SPDX声明使用 GPL-3.0-or-later，随包保留GPLv3文本。OpenMinis及各依赖的原有版权与许可义务继续适用。源码包不含完整OpenMinis仓库、Codex二进制、CA文件、用户令牌/密钥或SDK。真实用户包有高权限签名声明；Mach-O平台校验不等于签名认证或行为可信，不作重新分发许可判断。
+
+没有Mac/Xcode时当前能交付的是这份可复验源码补丁包，不能把它称为完成移植或可安装版本。

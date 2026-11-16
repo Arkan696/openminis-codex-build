@@ -10,8 +10,11 @@ NS_ASSUME_NONNULL_BEGIN
 @property(atomic,readonly) BOOL running;
 @property(atomic,readonly) int processIdentifier;
 @property(atomic,copy,readonly,nullable) NSString *workingDirectory;
-// Bundle resources must be CodexRuntime/codex, CodexRuntime/ca-certificates.crt,
-// and CodexRuntime/text-only.toml. Never launches automatically or via iSH.
+// Research/TrollStore-only for the currently provided core: its Mach-O declares
+// platform-application + no-sandbox private entitlements. This is NOT App Store
+// safe, and the dedicated workspace is NOT a kernel security boundary. Bundle
+// resources must be CodexRuntime/codex, CodexRuntime/ca-certificates.crt and
+// CodexRuntime/text-only.toml. Never launches automatically or via iSH.
 - (void)startInBundle:(NSBundle *)bundle completion:(void (^)(NSError * _Nullable error))completion NS_SWIFT_NAME(start(in:completion:));
 // Bare NDJSON envelope, no jsonrpc field. Only the milestone's fixed RPC allowlist.
 - (void)sendMessage:(NSDictionary<NSString *,id> *)message completion:(void (^)(NSError * _Nullable error))completion NS_SWIFT_NAME(send(_:completion:));

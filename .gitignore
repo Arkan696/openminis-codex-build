@@ -1,4 +1,7 @@
 build/
+dist/
+.venv/
+patches/pbx-work/
 __pycache__/
 *.pyc
 CodexRuntime/
