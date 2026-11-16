@@ -1,0 +1,45 @@
+name: Build OpenMinis public source
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Fixed OpenMinis commit
+        required: true
+        default: 1a71df0f381cefde80bf912b723de6f9831bc177
+jobs:
+  build:
+    # Uses only public OpenMinis source and this overlay.
+    # No Codex runtime, key, auth.json, CA bundle or user session is uploaded.
+    runs-on: macos-26
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Validate fixed source commit
+        env:
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: test "$REQUESTED_REF" = "1a71df0f381cefde80bf912b723de6f9831bc177"
+      - name: Build unsigned public app
+        run: bash ci/build_openminis.sh
+      - name: Upload unsigned app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openminis-codex-public-app-${{ github.run_id }}
+          path: build/public-artifact
+          if-no-files-found: error
+          retention-days: 7
+      - name: Preserve compiler diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openminis-codex-build-logs-${{ github.run_id }}
+          path: |
+            build/mac-build.log
+            build/xcode-archive.log
+            build/EngineCompile/APPLE-VERIFICATION.json
+            build/EngineCompile/xcode-*.log
+          if-no-files-found: ignore
+          retention-days: 7
