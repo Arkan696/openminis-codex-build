@@ -7,7 +7,7 @@
 - `OMCodexFramer.h/.c`：有限长度/总量、CRLF、跨 chunk 和逐字节 UTF-8 NDJSON 分帧。
 - `OMCodexProcessHost.h/.m`：bundle 内 ARM64 iOS Mach-O 校验、固定 CA 摘要、独立临时 workspace、三管道、白名单环境、出站 RPC allowlist、意外请求 fail-closed、进程组终止/单 owner waitpid。
 - `CodexProtocol.swift`：Codex 事件/状态、官方 OAuth URL 校验、错误脱敏。
-- `CodexSessionEngine.swift`：独立 engine 状态机和固定 app-server RPC 映射。
+- `CodexSessionEngine.swift`：独立 engine 状态机草案；线程 cwd 由 per-session workspace 的 `empty` 子目录提供，不修改 OpenMinis 进程 cwd。Codex 官方 RPC 的 payload/事件字段仍待 Xcode XCTest 与真实核心端到端验证。
 - `CodexSessionView.swift`：iOS16 SwiftUI standalone 页面和 App 内系统 Safari OAuth。
 - `CodexEngineResources/text-only.toml`：ephemeral认证、MCP/shell/图像/目录发现等功能禁用。用户授权的 codex Mach-O 和 CA 不随 overlay 公开。
 - `tests/test_framer.c` 和 `tests/swift-fixture/CodexSessionEngineTests.swift`：C 可本机运行；Swift XCTest 仅供 Mac/Xcode 加入 XCTest target。

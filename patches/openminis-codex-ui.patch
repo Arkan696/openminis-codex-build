@@ -1,0 +1,49 @@
+diff --git a/src/ios/MinisApp-Bridging-Header.h b/src/ios/MinisApp-Bridging-Header.h
+index 9a8b183..495e338 100644
+--- a/src/ios/MinisApp-Bridging-Header.h
++++ b/src/ios/MinisApp-Bridging-Header.h
+@@ -24,6 +24,7 @@
+ 
+ // ISH Shell Executor (pipe-based process execution)
+ #import "ISHShellExecutor.h"
++#import "CodexEngine/OMCodexProcessHost.h"
+ 
+ // Native Offloads (native offload handlers for iSH commands)
+ #import "FFmpegOffload.h"
+diff --git a/src/ios/Views/ContentView/ContentView+SidebarToolbar.swift b/src/ios/Views/ContentView/ContentView+SidebarToolbar.swift
+index 0272660..89e4798 100644
+--- a/src/ios/Views/ContentView/ContentView+SidebarToolbar.swift
++++ b/src/ios/Views/ContentView/ContentView+SidebarToolbar.swift
+@@ -372,6 +372,11 @@ extension ContentView {
+         ToolbarItem(placement: .topBarTrailing) {
+             if !isSelecting {
+                 Menu {
++                    Button {
++                        activeToolSheet = .codexSession
++                    } label: {
++                        Label("Codex 独立会话", systemImage: "cpu")
++                    }
+                     Button {
+                         showTerminal = true
+                     } label: {
+diff --git a/src/ios/Views/ContentView/ContentView.swift b/src/ios/Views/ContentView/ContentView.swift
+index 2f76a8c..a9b446a 100644
+--- a/src/ios/Views/ContentView/ContentView.swift
++++ b/src/ios/Views/ContentView/ContentView.swift
+@@ -76,6 +76,7 @@ enum ToolSheet: String, Identifiable {
+     case rootfsManagement
+     case browser
+     case browserManagement
++    case codexSession
+     case syncMigrationDetail
+     var id: String { rawValue }
+ }
+@@ -807,6 +808,8 @@ struct ContentView: View {
+                 NavigationStack {
+                     BrowserManagementView(pool: browserPool)
+                 }
++            case .codexSession:
++                CodexSessionView()
+             case .syncMigrationDetail:
+                 NavigationStack {
+                     SyncMigrationDetailView()

@@ -28,12 +28,29 @@ static BOOL OMSafeEnvelope(NSDictionary *m){
  if(![requestID isKindOfClass:NSNumber.class] && !([requestID isKindOfClass:NSString.class] && [requestID length]>0 && [requestID length]<=64))return NO;
  NSDictionary *p=m[@"params"];
  if(![p isKindOfClass:NSDictionary.class])return NO;
- if([method isEqual:@"account/login/start"])return [p isEqual:@{@"type":@"chatgpt"}];
- if([method isEqual:@"thread/start"] || [method isEqual:@"turn/start"]){
-  if(![p[@"environments"] isEqual:@[]])return NO;
-  if(![p[@"approvalPolicy"] isEqual:@"untrusted"])return NO;
-  if([method isEqual:@"thread/start"] && (![p[@"sandbox"] isEqual:@"read-only"] || ![p[@"ephemeral"] isEqual:@YES]))return NO;
+ if([method isEqual:@"initialize"]){
+  NSDictionary *expected=@{@"clientInfo":@{@"name":@"openminis_codex",@"title":@"OpenMinis Codex",@"version":@"0.1"},@"capabilities":@{@"experimentalApi":@YES,@"explicitGatewayOauth":@YES}};
+  return m.count==3 && [p isEqual:expected];
  }
+ if([method isEqual:@"account/login/start"])return m.count==3 && [p isEqual:@{@"type":@"chatgpt"}];
+ if([method isEqual:@"account/read"])return m.count==3 && [p isEqual:@{@"refreshToken":@NO}];
+ if([method isEqual:@"thread/start"]){
+  NSSet *keys=[NSSet setWithArray:@[@"cwd",@"sandbox",@"approvalPolicy",@"ephemeral",@"environments"]];
+  for(id key in p)if(![keys containsObject:key])return NO;
+  return p.count==5 && [p[@"cwd"] isKindOfClass:NSString.class] && [p[@"cwd"] hasPrefix:@"/"] && [p[@"sandbox"] isEqual:@"read-only"] && [p[@"approvalPolicy"] isEqual:@"untrusted"] && [p[@"ephemeral"] isEqual:@YES] && [p[@"environments"] isEqual:@[]];
+ }
+ if([method isEqual:@"turn/start"]){
+  NSSet *keys=[NSSet setWithArray:@[@"threadId",@"input",@"environments",@"approvalPolicy",@"sandboxPolicy"]];
+  for(id key in p)if(![keys containsObject:key])return NO;
+  id input=p[@"input"];
+  if(p.count!=5 || ![p[@"threadId"] isKindOfClass:NSString.class] || ![p[@"approvalPolicy"] isEqual:@"untrusted"] || ![p[@"environments"] isEqual:@[]])return NO;
+  if(![p[@"sandboxPolicy"] isEqual:@{@"type":@"readOnly",@"networkAccess":@NO}])return NO;
+  if(![input isKindOfClass:NSArray.class] || [input count]!=1)return NO;
+  NSDictionary *item=[input firstObject];
+  return [item isKindOfClass:NSDictionary.class] && [item[@"type"] isEqual:@"text"] && [item[@"text"] isKindOfClass:NSString.class] && [item[@"text"] length]<=32768 && [item[@"text_elements"] isEqual:@[]];
+ }
+ if([method isEqual:@"turn/interrupt"])return p.count==2 && [p[@"threadId"] isKindOfClass:NSString.class] && [p[@"turnId"] isKindOfClass:NSString.class];
+ return YES;
  return YES;
 }
 @interface OMCodexProcessHost () {
@@ -99,8 +116,10 @@ static BOOL OMSafeEnvelope(NSDictionary *m){
   char *made=mkdtemp(buf);if(made)root=[fm stringWithFileSystemRepresentation:made length:strlen(made)];free(buf);if(root)break;
  }
  if(!root){*error=OMPosix(errno,@"private workspace");return nil;}
- for(NSString *part in @[@"home",@"home/.codex",@"tmp",@"empty"]){
-  if(![fm createDirectoryAtPath:[root stringByAppendingPathComponent:part] withIntermediateDirectories:NO attributes:@{NSFilePosixPermissions:@0700} error:error]){[fm removeItemAtPath:root error:NULL];return nil;}
+ (void)chmod(root.fileSystemRepresentation,0700);
+ for(NSString *part in @[@"home/.codex",@"tmp",@"empty"]){
+  if(![fm createDirectoryAtPath:[root stringByAppendingPathComponent:part] withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions:@0700} error:error]){[fm removeItemAtPath:root error:NULL];return nil;}
+  NSString *dir=[root stringByAppendingPathComponent:part];(void)chmod(dir.fileSystemRepresentation,0700);
  }
  NSData *profile=[NSData dataWithContentsOfFile:[runtime stringByAppendingPathComponent:@"text-only.toml"]];
  NSString *cfg=[root stringByAppendingPathComponent:@"home/.codex/config.toml"];
@@ -120,7 +139,9 @@ static BOOL OMSafeEnvelope(NSDictionary *m){
  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY,0),^{@autoreleasepool{[self runWithBundle:bundle completion:completion];}});
 }
 static BOOL OMPipe(int fds[2],NSError **error){
- if(pipe(fds)!=0){*error=OMPosix(errno,@"stdio pipe");return NO;}
+ fds[0]=-1;fds[1]=-1;
+ if(pipe(fds)!=0){if(error)*error=OMPosix(errno,@"stdio pipe");return NO;}
+
  for(int i=0;i<2;i++){
   if(fds[i]<3){int next=fcntl(fds[i],F_DUPFD_CLOEXEC,3);close(fds[i]);fds[i]=next;}
   if(fds[i]<0 || fcntl(fds[i],F_SETFD,FD_CLOEXEC)<0){*error=OMPosix(errno,@"pipe flags");return NO;}

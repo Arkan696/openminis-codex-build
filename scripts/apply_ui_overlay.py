@@ -1,20 +1,36 @@
 #!/usr/bin/env python3
-"""Opt-in source overlay for a full OpenMinis checkout.
+"""Generate reviewed Xcode integration files for the pinned OpenMinis checkout.
 
-Default is a dry run. It copies CodexEngine source/resources only and writes a
-small integration note; PBX source/resource membership and toolbar edits are
-left for a Mac/Xcode review because this research tree is not a git checkout.
+Default is dry-run. --apply only copies a new isolated CodexEngine directory,
+adds one bridging-header import and a separately named CodexOverlay.xcconfig.
+It deliberately does NOT edit project.pbxproj or ContentView: the user must
+add the engine sources/resources and review the UI action in Xcode.
 """
 from pathlib import Path
-import argparse, subprocess, sys
-ROOT=Path(__file__).resolve().parents[1]
+import argparse,subprocess
 EXPECTED='1a71df0f381cefde80bf912b723de6f9831bc177'
+ROOT=Path(__file__).resolve().parents[1]
 ap=argparse.ArgumentParser();ap.add_argument('--repo',type=Path,required=True);ap.add_argument('--apply',action='store_true');a=ap.parse_args();repo=a.repo.resolve()
-if not (repo/'src/ios/Minis.xcodeproj/project.pbxproj').is_file():raise SystemExit('REFUSED: not OpenMinis')
-rev=subprocess.run(['git','rev-parse','HEAD'],cwd=repo,text=True,capture_output=True)
-if rev.returncode or rev.stdout.strip()!=EXPECTED:raise SystemExit('REFUSED: wrong OpenMinis commit')
+pbx=repo/'src/ios/Minis.xcodeproj/project.pbxproj'
+if not pbx.is_file():raise SystemExit('REFUSED: not an OpenMinis checkout')
+git=subprocess.run(['git','rev-parse','HEAD'],cwd=repo,text=True,capture_output=True)
+if git.returncode or git.stdout.strip()!=EXPECTED:raise SystemExit('REFUSED: wrong OpenMinis commit')
+bridging=repo/'src/ios/MinisApp-Bridging-Header.h'
+if not bridging.is_file():raise SystemExit('REFUSED: bridging header missing')
+imp='#import "CodexEngine/OMCodexProcessHost.h"'
+if imp in bridging.read_text():raise SystemExit('REFUSED: Codex host already imported; inspect manually')
+print('Pinned source:',EXPECTED)
+print('Target baseline: Minis app iOS16.0 / Swift5; no project.pbxproj edits will be made.')
+print('Files to copy:',len([p for p in (ROOT/'overlay/src/ios/CodexEngine').rglob('*') if p.is_file()]))
+print('New xcconfig: src/ios/Configs/CodexOverlay.xcconfig (does not overwrite existing provider config)')
 if not a.apply:
- print('DRY RUN: would add overlay/src/ios/CodexEngine to Minis target and add CodexSessionView sheet/toolbar entry.')
- print('Manual Xcode steps: add .h/.m/.c/.swift files, bridging header import, CodexRuntime resources, and link only Minis app target.')
- raise SystemExit(0)
-raise SystemExit('REFUSED: automatic PBX/UI mutation is intentionally disabled; apply after Xcode review.')
+ print('DRY RUN: use --apply only in a clean macOS checkout after review.');raise SystemExit(0)
+dst=repo/'src/ios/CodexEngine';dst.mkdir(parents=True,exist_ok=False)
+import shutil
+shutil.copytree(ROOT/'overlay/src/ios/CodexEngine',dst,dirs_exist_ok=True)
+# User-supplied authorized resources must be added in Xcode; never source from this script.
+with (repo/'src/ios/MinisApp-Bridging-Header.h').open('a') as f:f.write('\n// Codex independent session engine (GPLv3 overlay)\n'+imp+'\n')
+config=repo/'src/ios/Configs/CodexOverlay.xcconfig'
+config.write_text('''// Optional Codex overlay build settings. Merge this file with the Minis target's existing base configuration in Xcode; do not replace ProviderCustomization.xcconfig.\nCODEX_ENGINE_ENABLED = NO\nCODEX_ENGINE_RESOURCE_SUBPATH = CodexRuntime\n''')
+print('Applied isolated Swift/ObjC/C source overlay and new xcconfig. No secrets or binaries copied.')
+print('Manual Xcode follow-up remains: add source files/resources to Minis target and explicitly enable CODEX_ENGINE_ENABLED after building/tests.')
