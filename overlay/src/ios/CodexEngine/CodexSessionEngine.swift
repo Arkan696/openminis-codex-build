@@ -43,7 +43,7 @@ final class CodexSessionEngine: ObservableObject {
         Task { @MainActor in
             do { try await Task<Never, Never>.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000)) }
             catch { return }
-            guard !Task<Never, Never>.isCancelled else { return }
+            guard !Task.isCancelled else { return }
             action()
         }
     }

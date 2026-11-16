@@ -15,8 +15,8 @@
 ## 本机验证结果
 
 ```text
-OMCodexProcessHost.m: clang -target arm64-apple-ios16.5 -fsyntax-only PASSED
-OMCodexFramer.c: iOS16.5 ARM64 object compile PASSED
+OMCodexProcessHost.m: clang -target arm64-apple-ios16.5 -fsyntax-only PASSED (strict fixed RPC schema + tail-pipe drain)
+OMCodexFramer.c: iOS16.5 ARM64 object compile PASSED; shared-ELF runtime boundary tests PASSED
 OMCodexFramer C runtime unit test: PASSED (executed as shared ELF via Python ctypes)
 text-only.toml: Python tomllib parser PASSED
 Swift: NOT TYPECHECKED (本机无 swift/swiftc/Xcode)
