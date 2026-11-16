@@ -15,7 +15,7 @@
 - 复制的生产源文件与当前 overlay 的 SHA-256 一致，不使用“假 Foundation/Combine”或 Python 重写状态机来冒充 Swift 编译。
 - 默认命令只输出计划，不创建输出、不调用 xcodebuild；Linux 上 `--execute` 明确拒绝。
 - 构建失败保留独立日志和 false 成功标记；Xcode 返回0但缺少 xcresult，或0个/少于预期/失败测试，不记录 XCTest 成功。
-- 本轮新增9项 Python 工具测试与原有13项共同通过；它们不运行Swift/UIKit。
+- v0.2.1 中 Apple 工具测试为13项，与原有13项 overlay 工具测试合计26项。它们不运行Swift/UIKit；编译产物和完整结果分支使用临时的模拟标记数据，不代表实际Apple编译。源码中的16项Swift XCTest仍未执行。
 
 ## 在有完整 Xcode 的 Mac 上执行
 
@@ -41,7 +41,7 @@ python3 scripts/verify_apple.py --out /tmp/codex-build-check --mode build --exec
 
 这里调用 `xcodebuild build-for-testing`，Swift语言模式5、deployment16.5。它使用机器上安装的Apple SDK，不保证安装在iOS16.5设备上可运行。若编译错误，`xcode-1.log` 保留真实诊断；脚本不能修复或忽略错误。
 
-执行14项mock XCTest需要你事先在Xcode打开一个可用的iOS Simulator。脚本只读列出booted设备验证指定UDID，不创建、启动、关闭模拟器，也不选真实iPhone。测试会把**无runtime的验证宿主**运行在该模拟器里：
+执行16项mock XCTest需要你事先在Xcode打开一个可用的iOS Simulator。脚本只读列出booted设备验证指定UDID，不创建、启动、关闭模拟器，也不选真实iPhone。测试会把**无runtime的验证宿主**运行在该模拟器里：
 
 ```sh
 xcrun simctl list devices booted

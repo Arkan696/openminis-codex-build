@@ -156,10 +156,11 @@ final class CodexSessionEngineTests: XCTestCase {
         host.event("account/login/completed", ["loginId": "login", "success": true])
         XCTAssertEqual(engine.state, .confirmingLogin)
         XCTAssertNotNil(engine.browser)
+        let presentationID = engine.browser!.id
         host.reply("account/read", ["account": ["type": "chatgpt"], "requiresOpenaiAuth": true])
         XCTAssertEqual(engine.state, .ready)
         XCTAssertNil(engine.browser)
-        engine.browserDidClose()
+        engine.browserDidClose(presentationID: presentationID)
         XCTAssertEqual(host.stopCount, 0)
         engine.stop()
     }
@@ -174,7 +175,7 @@ final class CodexSessionEngineTests: XCTestCase {
         host.reply("account/login/start", ["type": "chatgpt", "loginId": "login",
                                              "authUrl": "https://chatgpt.com/auth"])
         host.event("account/login/completed", ["loginId": "login", "success": true])
-        engine.browserDidClose()
+        engine.browserDidClose(presentationID: engine.browser!.id)
         XCTAssertEqual(host.stopCount, 1)
         XCTAssertNil(engine.loginId)
         XCTAssertEqual(engine.state, .idle)
@@ -267,6 +268,69 @@ final class CodexSessionEngineTests: XCTestCase {
         host.event("turn/completed", ["threadId": "thread", "turn": ["id": "wrong-turn", "status": "completed", "items": []]])
         XCTAssertEqual(engine.state, .streaming)
         XCTAssertEqual(engine.turnId, "turn")
+        engine.stop()
+    }
+
+    func testWrongBrowserIdentityIsIgnoredAndMatchingCloseStopsOnce() {
+        let host = FixtureTransport()
+        let engine = CodexSessionEngine(transportFactory: { host })
+        engine.connect()
+        host.reply("initialize", ["userAgent": "fixture"])
+        host.reply("account/read", ["account": NSNull(), "requiresOpenaiAuth": true])
+        engine.loginChatGPT()
+        host.reply("account/login/start", ["type": "chatgpt", "loginId": "login",
+                                             "authUrl": "https://auth.openai.com/oauth/authorize"])
+        let pageID = engine.browser!.id
+        engine.browserDidClose(presentationID: UUID())
+        XCTAssertEqual(engine.state, .loggingIn)
+        XCTAssertEqual(engine.browser?.id, pageID)
+        XCTAssertEqual(host.stopCount, 0)
+        engine.browserDidClose(presentationID: pageID)
+        engine.browserDidClose(presentationID: pageID)
+        XCTAssertEqual(host.stopCount, 1)
+        XCTAssertEqual(engine.state, .idle)
+        XCTAssertNil(engine.browser)
+    }
+
+    func testOldSafariCloseCannotStopNewLoginAfterReconnect() {
+        let first = FixtureTransport()
+        let second = FixtureTransport()
+        var connections = 0
+        let engine = CodexSessionEngine(transportFactory: {
+            let next = connections == 0 ? first : second
+            connections += 1
+            return next
+        })
+        engine.connect()
+        first.reply("initialize", ["userAgent": "fixture"])
+        first.reply("account/read", ["account": NSNull(), "requiresOpenaiAuth": true])
+        engine.loginChatGPT()
+        first.reply("account/login/start", ["type": "chatgpt", "loginId": "first-login",
+                                              "authUrl": "https://auth.openai.com/oauth/authorize"])
+        let oldPageID = engine.browser!.id
+        engine.stop()
+        engine.connect()
+        second.reply("initialize", ["userAgent": "fixture"])
+        second.reply("account/read", ["account": NSNull(), "requiresOpenaiAuth": true])
+        engine.loginChatGPT()
+        second.reply("account/login/start", ["type": "chatgpt", "loginId": "second-login",
+                                               "authUrl": "https://auth.openai.com/oauth/authorize"])
+        let currentPageID = engine.browser!.id
+        XCTAssertNotEqual(oldPageID, currentPageID)
+        engine.browserDidClose(presentationID: oldPageID)
+        XCTAssertEqual(engine.state, .loggingIn)
+        XCTAssertEqual(engine.loginId, "second-login")
+        XCTAssertEqual(second.stopCount, 0)
+        second.event("account/login/completed", ["loginId": "second-login", "success": true])
+        engine.browserDidClose(presentationID: oldPageID)
+        XCTAssertEqual(engine.state, .confirmingLogin)
+        XCTAssertEqual(second.stopCount, 0)
+        second.reply("account/read", ["account": ["type": "chatgpt"], "requiresOpenaiAuth": true])
+        engine.browserDidClose(presentationID: oldPageID)
+        engine.browserDidClose(presentationID: currentPageID)
+        XCTAssertTrue(engine.canSend)
+        XCTAssertEqual(first.stopCount, 1)
+        XCTAssertEqual(second.stopCount, 0)
         engine.stop()
     }
 

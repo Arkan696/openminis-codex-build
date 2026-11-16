@@ -30,6 +30,7 @@ def main():
     def run(label,command,env=None):
         with logs.open('ab') as out:
             out.write(('\nCHECK: '+label+'\n').encode())
+            out.flush()
             subprocess.run([str(p) for p in command],cwd=ROOT,stdout=out,stderr=out,env=env,check=True)
         completed.append(label)
     baseline(args.baseline)
@@ -52,6 +53,12 @@ def main():
     run('apple_validation_generator_and_failure_report_tests',[sys.executable,ROOT/'tests/test_apple_validation_tools.py'],env)
     revision=subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,text=True,capture_output=True).stdout.strip()
     source_files={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in native.iterdir() if p.name in FILES}
+    fixture=ROOT/'tests/swift-fixture/CodexSessionEngineTests.swift'
+    source_files[str(fixture.relative_to(ROOT))]=hashlib.sha256(fixture.read_bytes()).hexdigest()
+    log_text=logs.read_text()
+    counts=re.findall(r'^Ran (\d+) tests? in [^\n]+\n\nOK$',log_text,re.M)
+    if len(counts)!=2:
+        raise SystemExit('Expected two successful unittest summaries in the actual test log')
     report={
         'upstream_commit':EXPECTED,'overlay_commit_before_verification':revision,
         'local_checks_passed':completed,'local_test_log':'build/verification.log',
@@ -62,7 +69,7 @@ def main():
         'apple_validation_project_generator_tested':True,
         'apple_validation_project_built':False,
         'swift_fixture_cases_defined_not_executed':len(re.findall(r'^\s*func test\w+\s*\(', (ROOT/'tests/swift-fixture/CodexSessionEngineTests.swift').read_text(), re.M)),
-        'python_tool_test_cases_passed':22,
+        'python_tool_test_cases_passed':sum(int(count) for count in counts),
     }
     (ROOT/'VERIFICATION.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     print(json.dumps(report,ensure_ascii=False,indent=2))

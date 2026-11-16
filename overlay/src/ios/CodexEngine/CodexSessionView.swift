@@ -30,9 +30,19 @@ struct CodexSessionView: View {
                 }
             }
         }
-        .sheet(item: browserBinding, onDismiss: { engine.browserDidClose() }) { presentation in
-            CodexOfficialSafariView(url: presentation.url) { engine.browserDidClose() }
-                .ignoresSafeArea()
+        .sheet(item: browserBinding) { presentation in
+            CodexOfficialSafariView(url: presentation.url) {
+                engine.browserDidClose(presentationID: presentation.id)
+            }
+            .ignoresSafeArea()
+            // Use Safari's explicit Cancel button; an interactive sheet nil
+            // setter does not carry the identity of the departing controller.
+            .interactiveDismissDisabled()
+            .onDisappear {
+                // The departing page owns this immutable identity, even if a
+                // newer login is already active when SwiftUI calls us back.
+                engine.browserDidClose(presentationID: presentation.id)
+            }
         }
         .onChange(of: scenePhase) { phase in
             if phase == .background { engine.movedToBackground() }
@@ -41,9 +51,10 @@ struct CodexSessionView: View {
     }
 
     private var browserBinding: Binding<CodexBrowserPresentation?> {
-        Binding(get: { engine.browser }, set: { value in
-            if value == nil { engine.browserDidClose() }
-        })
+        // Dismissal is handled by the page-specific Safari delegate/onDisappear
+        // above. The sheet's generic nil setter carries no page identity and
+        // must not cancel whichever login happens to be current at that instant.
+        Binding(get: { engine.browser }, set: { _ in })
     }
 
     private var status: some View {

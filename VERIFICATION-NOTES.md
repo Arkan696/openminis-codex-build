@@ -16,7 +16,11 @@ Completed locally:
 7. Nine local Apple-validation-tool tests executed: generated PBX object graph and target/module/test-host linkage; shared scheme; exact production source copying; default plan/no write/no Xcode; refusal to execute on Linux; explicit booted iOS simulator requirement; compiler-failure report; zero/partial XCTest result refusal; missing xcresult never counted as success. These are Python tests of the generator/runner, not Apple compilation.
 8. Four additional Swift regression scenarios were written (interrupt terminal before ACK, delayed native stop, early login completion, wrong thread/turn), bringing the fixture to 14 test methods. NONE has executed in XCTest.
 
-Total executed Python cases: 22. A mock-only standalone Apple project can now be generated without iSH/FFmpeg/rclone; see APPLE-VALIDATION.md. No runnable Swift compiler has been verified on the current Alpine/musl host. Do not count the static Linux SDK or project generation as typecheck.
+v0.2.1 source change: browserDidClose now requires the UUID captured by the departing Safari presentation; callbacks for older pages cannot cancel a newer login. The identity-free generic sheet dismiss callback is removed; interactive sheet dismissal is disabled in favor of Safari's explicit Cancel action. Two Swift regression cases cover mismatched/duplicate close callbacks and an old Safari close arriving after a new login. The fixture now defines 16 XCTest methods, NONE executed here.
+
+Four additional local Python cases verify missing compiler products, nonempty Swift-module requirements, complete synthetic result/report processing and the page-identity source invariant. The existing missing-xcresult case now supplies synthetic compiled-product markers, proving it reaches the intended result-bundle check. These marker bytes are not compiled Apple products; mocked execution is confined to a temporary test directory.
+
+Total executed Python cases: 26 (13 overlay tools + 13 Apple-validation tools). Report counts are taken from actual successful unittest summaries, not a hardcoded number. A mock-only standalone Apple project can be generated without iSH/FFmpeg/rclone; see APPLE-VALIDATION.md. No runnable Swift compiler has been verified on the current Alpine/musl host. Do not count the static Linux SDK, source guards or project generation as typecheck.
 
 Not completed:
 

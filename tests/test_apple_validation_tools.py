@@ -150,14 +150,92 @@ class AppleToolTests(unittest.TestCase):
                         {'failedTests':1}, {'result':'Failed'}, {'totalTestCount':'12'}):
             with self.assertRaises(Refused):runner.verify_test_summary({**summary,**altered},12)
 
+    def synthetic_products(self, work, embedded=False):
+        # Marker bytes test Python report branches; they are NOT Apple binaries.
+        products=work/'DerivedData/Build/Products/Debug-iphonesimulator'
+        app=products/(project.MODULE+'.app')/project.MODULE
+        test=products/'CodexOverlayTests.xctest/CodexOverlayTests'
+        if embedded:test=app.parent/'PlugIns/CodexOverlayTests.xctest/CodexOverlayTests'
+        module=products/(project.MODULE+'.swiftmodule')/'arm64-apple-ios-simulator.swiftmodule'
+        for p in (app,test,module):
+            p.parent.mkdir(parents=True,exist_ok=True)
+            p.write_bytes(b'SYNTHETIC REPORT TEST DATA, NOT A COMPILED PRODUCT')
+        return app,test,module
+
     def test_xcode_success_without_xcresult_is_not_xctest_success(self):
         out=self.root/'missing-result';plan=runner.commands(out,'test','FIXTURE-UDID')
-        with mock.patch.object(runner.subprocess,'run',return_value=subprocess.CompletedProcess([],0)):
-            with self.assertRaises(Refused):
+        def successful_command(cmd,**kwargs):
+            self.synthetic_products(out)
+            return subprocess.CompletedProcess(cmd,0)
+        with mock.patch.object(runner.subprocess,'run',side_effect=successful_command):
+            with self.assertRaisesRegex(Refused,'result bundle'):
                 runner.execute(out,'test','FIXTURE-UDID',plan,{'script_test_fixture':True})
         result=json.loads((out/'APPLE-VERIFICATION.json').read_text())
         self.assertEqual(result['status'],'failed');self.assertFalse(result['xctest_passed'])
         self.assertFalse(result['xctest_executed'])
+        self.assertIn('compiled_products',result) # Proves the xcresult branch was reached.
+
+    def test_zero_command_status_without_products_is_not_compile_success(self):
+        out=self.root/'missing-products';plan=runner.commands(out,'build')
+        with mock.patch.object(runner.subprocess,'run',return_value=subprocess.CompletedProcess([],0)):
+            with self.assertRaisesRegex(Refused,'compiled app and XCTest products'):
+                runner.execute(out,'build',None,plan,{'script_test_fixture':True})
+        result=json.loads((out/'APPLE-VERIFICATION.json').read_text())
+        self.assertEqual(result['status'],'failed')
+        self.assertFalse(result['swift_sources_compiled'])
+        self.assertFalse(result['xctest_compiled'])
+
+    def test_product_inspection_requires_nonempty_swift_module(self):
+        out=self.root/'artifacts'
+        app,test,module=self.synthetic_products(out)
+        module.unlink()
+        with self.assertRaisesRegex(Refused,'production Swift module'):runner.compiled_artifacts(out)
+        module.write_bytes(b'')
+        with self.assertRaisesRegex(Refused,'production Swift module'):runner.compiled_artifacts(out)
+        module.write_bytes(b'SYNTHETIC MODULE')
+        observed=runner.compiled_artifacts(out)
+        self.assertEqual(len(observed),3)
+        for p in (app,test,module):
+            self.assertEqual(observed[str(p.relative_to(out))],hashlib.sha256(p.read_bytes()).hexdigest())
+        test.unlink()
+        with self.assertRaisesRegex(Refused,'compiled app and XCTest products'):runner.compiled_artifacts(out)
+        self.synthetic_products(out,embedded=True)
+        self.assertEqual(len(runner.compiled_artifacts(out)),3)
+
+    def test_complete_synthetic_result_exercises_summary_and_report(self):
+        out=self.root/'synthetic-result';plan=runner.commands(out,'test','FIXTURE-UDID')
+        expected=len(re.findall(r'^\s*func test\w+\s*\(',project.FIXTURE.read_text(),re.M))
+        requested=[]
+        def fake_command(cmd,**kwargs):
+            requested.append(cmd)
+            if cmd[0]=='xcodebuild':
+                self.synthetic_products(out)
+                (out/'MockTests.xcresult').mkdir()
+                return subprocess.CompletedProcess(cmd,0)
+            self.assertEqual(cmd,['xcrun','xcresulttool','get','test-results','summary','--path',str(out/'MockTests.xcresult')])
+            data={'result':'Passed','totalTestCount':expected,'passedTests':expected,'failedTests':0}
+            return subprocess.CompletedProcess(cmd,0,json.dumps(data),'')
+        with mock.patch.object(runner.subprocess,'run',side_effect=fake_command):
+            self.assertEqual(runner.execute(out,'test','FIXTURE-UDID',plan,{'script_test_fixture':True}),0)
+        report=json.loads((out/'APPLE-VERIFICATION.json').read_text())
+        self.assertEqual(len(requested),2)
+        self.assertEqual(report['status'],'passed')
+        self.assertEqual(report['xctest_counts']['passed'],expected)
+        self.assertTrue(report['tool_versions']['script_test_fixture'])
+        for key in ('codex_executed','real_oauth_tested','full_openminis_built','tipa_built','physical_device_tested'):
+            self.assertFalse(report[key],key)
+
+    def test_late_safari_callbacks_always_have_presentation_identity(self):
+        # Source guard only: this does NOT execute the Swift state machine.
+        view=(project.SOURCE/'CodexSessionView.swift').read_text()
+        engine=(project.SOURCE/'CodexSessionEngine.swift').read_text()
+        fixture=project.FIXTURE.read_text()
+        self.assertIn('func browserDidClose(presentationID: UUID)',engine)
+        self.assertIn('guard browser?.id == presentationID',engine)
+        self.assertNotIn('browserDidClose()',view+fixture+engine)
+        self.assertEqual(view.count('browserDidClose(presentationID: presentation.id)'),2)
+        self.assertIn('.interactiveDismissDisabled()',view)
+        self.assertIn('testOldSafariCloseCannotStopNewLoginAfterReconnect',fixture)
 
 if __name__=='__main__':
     unittest.main(verbosity=2)

@@ -171,10 +171,12 @@ final class CodexSessionEngine: ObservableObject {
         }
     }
 
-    func browserDidClose() {
-        // Programmatic dismissal after success is harmless. A manual early close
-        // cancels the login by stopping THIS host, never by starting another login.
-        guard state == .loggingIn || state == .confirmingLogin else { return }
+    func browserDidClose(presentationID: UUID) {
+        // A dismiss callback can arrive after stop/reconnect has opened another
+        // Safari controller. UUID identity binds the callback to its OWN login;
+        // state or loginId alone does not identify the page that was closed.
+        guard browser?.id == presentationID,
+              state == .loggingIn || state == .confirmingLogin else { return }
         stop(reason: "官方登录已取消，原核心已停止。")
     }
 

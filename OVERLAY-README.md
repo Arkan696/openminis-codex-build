@@ -1,6 +1,6 @@
-# OpenMinis Codex 源码补丁 v0.2 · 独立 Apple 验证工程
+# OpenMinis Codex 源码补丁 v0.2.1 · 独立 Apple 验证工程
 
-v0.2 增加真实 Swift/ObjC/C 源码的隔离 Xcode 编译与 mock XCTest 工程，不需要先构建全部 OpenMinis 原生依赖。当前完成的是生成器、验证脚本和本地测试，**没有运行 Xcode 或 Swift 编译器**；入口和结果解释见 [Apple 验证说明](APPLE-VALIDATION.md)。v0.1 源码包保留，不被覆盖。
+v0.2.1 修正了 Safari 授权页关闭回调没有绑定页面身份的问题：旧页面延迟关闭，不再取消新登录；只有匹配当前页面 UUID 的取消事件才会停止该次登录。并补齐缺少编译产物、缺少 xcresult、完整模拟结果的验证工具测试，测试总数从实际运行日志统计，源码摘要也覆盖 Swift 测试文件。它包含真实 Swift/ObjC/C 源码，但**没有运行 Xcode 或 Swift 编译器**；入口和结果解释见 [Apple 验证说明](APPLE-VALIDATION.md)。v0.2 源码包保留，不被覆盖。
 
 目标：iOS16.5 / TrollStore；固定 OpenMinis commit `1a71df0f381cefde80bf912b723de6f9831bc177`。用户已批准独立 CodexSessionEngine 架构。该版本有实际源代码、工程补丁和测试，但**不是 IPA/TIPA，也没有完成 Swift/Xcode 编译或真机验证**。
 
@@ -12,7 +12,7 @@ v0.2 增加真实 Swift/ObjC/C 源码的隔离 Xcode 编译与 mock XCTest 工�
 - `scripts/apply_overlay.py`：统一应用入口。默认 dry-run，拒绝错误提交、脏工作区、已有引擎目录、上游关键文件哈希不符；先准备独立目录，再应用同一份工程补丁，失败回滚本工具写入的内容，不覆盖并发用户修改。`apply_ui_overlay.py` 仅为同一入口的兼容别名。不要先应用旧的 `openminis-codex-ui.patch` 再应用完整补丁，完整补丁已经包含UI修改。
 - `scripts/prepare_codex_runtime.py`：本地流式读取用户授权 deb，只提取两个指定的普通 Mach-O 文件，拒绝链接/重复/超大/路径穿越/错误设备平台；校验固定公开 Mozilla CA、使用审阅过的 ephemeral 配置；成功后原子发布输出目录，失败不留下看似完整的 runtime。不下载、不上传、不运行核心，不提取 deb 中的配置或 auth.json。
 - `OMCodexProcessHost`：单owner进程、固定RPC参数allowlist、独立HOME/CODEX_HOME、NDJSON三管道、未实现请求断开、停止清理；配置和CA摘要检查，尾部排空有时限，父端管道标志在spawn前完成检查。底层签名是否有效仍由单独验收判断。
-- `tests/test_overlay_tools.py`：原有13项 Python/Git/PBX/合成deb 实际测试；新增`tests/test_apple_validation_tools.py`的9项生成器/失败报告测试，共22项通过。`overlay/tests/test_framer.c`通过本机shared-ELF/ctypes运行；14个Swift XCTest用例已写，**未执行**。
+- `tests/test_overlay_tools.py`：13项 Python/Git/PBX/合成deb 实际测试；`tests/test_apple_validation_tools.py`：13项生成器/失败报告及源码守卫测试，合计26项通过。`overlay/tests/test_framer.c`通过本机shared-ELF/ctypes运行；16个Swift XCTest用例已写，**未执行**。新增的授权竞态Swift用例不能用Python源码守卫代替。
 - `scripts/apple_validation_project.py` / `verify_apple.py`：在独立目录生成无runtime的UIKit测试宿主，真实生产源码原样编译，XCTest通过模块导入验证。默认只预览；实际执行要求macOS/Xcode。`test`只接收用户指定的已启动iOS模拟器，核对xcresult测试数，零测试/缺结果不算成功。不触碰真机或正式App。
 - 子进程新增`POSIX_SPAWN_CLOEXEC_DEFAULT`，避免继承宿主无关的打开文件；仍不把工作目录配置当作内核安全沙箱。
 
