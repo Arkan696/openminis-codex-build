@@ -1,6 +1,6 @@
-# OpenMinis Codex 源码补丁 v0.2.1 · 独立 Apple 验证工程
+# OpenMinis Codex 源码补丁 v0.2.2 · 独立 Apple 验证工程
 
-v0.2.1 修正了 Safari 授权页关闭回调没有绑定页面身份的问题：旧页面延迟关闭，不再取消新登录；只有匹配当前页面 UUID 的取消事件才会停止该次登录。并补齐缺少编译产物、缺少 xcresult、完整模拟结果的验证工具测试，测试总数从实际运行日志统计，源码摘要也覆盖 Swift 测试文件。它包含真实 Swift/ObjC/C 源码，但**没有运行 Xcode 或 Swift 编译器**；入口和结果解释见 [Apple 验证说明](APPLE-VALIDATION.md)。v0.2 源码包保留，不被覆盖。
+v0.2.2 在 v0.2.1 基础上重新生成验证摘要并修正授权页面竞态：关闭回调携带页面 UUID，旧 Safari 页面迟到关闭不会取消新登录；generic sheet dismiss 没有页面身份，不再触发取消。新增的 Swift 回归用例和26项本地工具测试均已记录，但**没有运行 Xcode 或 Swift 编译器**；入口和结果解释见 [Apple 验证说明](APPLE-VALIDATION.md)。旧源码包保留，不被覆盖。
 
 目标：iOS16.5 / TrollStore；固定 OpenMinis commit `1a71df0f381cefde80bf912b723de6f9831bc177`。用户已批准独立 CodexSessionEngine 架构。该版本有实际源代码、工程补丁和测试，但**不是 IPA/TIPA，也没有完成 Swift/Xcode 编译或真机验证**。
 
