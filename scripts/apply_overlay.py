@@ -108,7 +108,7 @@ def main(argv=None):
         verify_checkout(repo)
         inputs, patch, resources = plan(repo, args.runtime)
         print('Pinned OpenMinis:', EXPECTED)
-        print('Main target: 5 compiled sources + 2 header references + CodexRuntime folder')
+        print('Main target:',sum(not name.endswith('.h') for name in FILES),'compiled sources +',sum(name.endswith('.h') for name in FILES),'header references + CodexRuntime folder')
         print('Deployment targets, signing settings, Bundle IDs and provider config: unchanged')
         print('Runtime:', 'locally validated; signature NOT authenticated' if resources else 'absent; Connect will refuse to launch')
         if not args.apply:

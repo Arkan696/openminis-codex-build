@@ -16,6 +16,7 @@ FILES = {
     'CodexProtocol.swift': 'sourcecode.swift',
     'CodexSessionEngine.swift': 'sourcecode.swift',
     'CodexSessionView.swift': 'sourcecode.swift',
+    'OMProviderPaste.swift': 'sourcecode.swift',
     'OMCodexProcessHost.m': 'sourcecode.c.objc',
     'OMCodexProcessHost.h': 'sourcecode.c.h',
     'OMCodexFramer.c': 'sourcecode.c.c',

@@ -64,13 +64,14 @@ class OverlayTests(unittest.TestCase):
         self.assertEqual(one, (ROOT/'patches/openminis-codex-integration.patch').read_text())
         self.assertEqual(before, {n:(BASELINE/n).read_bytes() for n in lib.AFFECTED})
 
-    def test_pbx_parses_and_only_five_sources_are_compiled(self):
+    def test_pbx_parses_and_only_declared_sources_are_compiled(self):
         base = lib.baseline(BASELINE)
         original = parse(base[lib.AFFECTED[0]])
         edited = parse(lib.transform(base)[lib.AFFECTED[0]])
         old, obj = original['objects'], edited['objects']
         added = set(obj)-set(old)
-        self.assertEqual(len(added), 15)  # 7 refs, 5 build entries, group, runtime ref/build
+        self.assertEqual(len(added), len(lib.FILES)+len(lib.COMPILED)+3)
+        self.assertIn('OMProviderPaste.swift',lib.COMPILED)
         self.assertTrue(all(len(i)==24 and all(c in '0123456789ABCDEF' for c in i) for i in added))
         new_sources = set(obj['E51000041']['files'])-set(old['E51000041']['files'])
         names = {obj[obj[i]['fileRef']]['path'] for i in new_sources}

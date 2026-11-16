@@ -4,6 +4,7 @@ from pathlib import Path
 import argparse, hashlib, json, plistlib, subprocess
 from overlay_lib import EXPECTED, Refused, FILES
 from disable_unprovisioned_sync import proposed_changes as proposed_sync_changes
+from repair_provider_paste import proposed_changes as proposed_paste_changes
 
 APP_ID='local.openminis.codex'
 GROUP='group.'+APP_ID
@@ -30,8 +31,11 @@ def prepare(repo):
     # Parse entitlements before writing any source, so a malformed input fails early.
     for name in required:
         if name.endswith(('.entitlements','.plist')):plistlib.loads((ios/name).read_bytes())
-    # Validate all four fixed sync sources and anchors before any source writes.
-    sync_changes=proposed_sync_changes(ios)
+    # Validate fixed sync and provider sources before any source-tree writes.
+    source_changes=proposed_sync_changes(ios)
+    paste_changes=proposed_paste_changes(ios)
+    if set(source_changes)&set(paste_changes):raise Refused('Overlapping build source patches')
+    source_changes.update(paste_changes)
     changes=[]
     # Rebrand application IDs and keychain service literals, never copy a live app's data.
     for p in sorted(ios.rglob('*')):
@@ -39,7 +43,7 @@ def prepare(repo):
         try:s=p.read_text()
         except UnicodeDecodeError:continue
         rel=p.relative_to(ios).as_posix()
-        t=sync_changes.get(rel,s).replace('com.openminis.app',APP_ID)
+        t=source_changes.get(rel,s).replace('com.openminis.app',APP_ID)
         # External launch schemes must not be registered by both installed apps.
         # minis:// remains a resource protocol inside WebViews; only external
         # registration and share-extension launch are redirected to the test app.
@@ -54,6 +58,7 @@ def prepare(repo):
     for url in d.get('CFBundleURLTypes',[]):
         url['CFBundleURLSchemes']=[SCHEME if x=='minis' else 'miniscodex-mcp' if x=='minis-mcp' else x for x in url.get('CFBundleURLSchemes',[])]
     d['CFBundleDisplayName']='OpenMinis Codex'
+    d['CFBundleVersion']='2'
     info.write_bytes(plistlib.dumps(d))
     sign={}
     for rel,bundle in [('Minis.entitlements',APP_ID),('ShareExtension/ShareExtension.entitlements',APP_ID+'.ShareExtension'),('FileProvider/FileProvider.entitlements',APP_ID+'.FileProvider'),('AgentWidget/AgentWidget.entitlements',APP_ID+'.AgentWidget')]:
@@ -74,6 +79,7 @@ def prepare(repo):
     manifest={'schema':1,'upstream_commit':EXPECTED,'bundle_id':APP_ID,'app_group':GROUP,
               'external_scheme':SCHEME,'codex_core_included':False,'xcode_built':False,
               'unprovisioned_icloud_sync_disabled_in_source':True,
+              'provider_system_paste_controls_enabled':True,'ipa_build_number':'2',
               'signing_entitlements':sign,'modified_paths':changes,
               'limitations':['iCloud/push/WeatherKit are not provisioned for this independent TrollStore identity','Source-level namespace replacement still requires full build and device validation']}
     marker.write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')

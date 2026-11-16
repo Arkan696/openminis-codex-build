@@ -51,14 +51,17 @@ def main():
     env['CODEX_OVERLAY_TEST_CA']=str(args.ca_bundle.resolve())
     run('python_git_pbx_runtime_fixture_tests',[sys.executable,ROOT/'tests/test_overlay_tools.py'],env)
     run('apple_validation_generator_and_failure_report_tests',[sys.executable,ROOT/'tests/test_apple_validation_tools.py'],env)
+    run('independent_build_sync_guards',[sys.executable,ROOT/'tests/test_build_sync_gate.py'],env)
+    run('provider_system_paste_source_copy_tests',[sys.executable,ROOT/'tests/test_provider_paste_patch.py'],env)
+    run('local_signed_ipa_pipeline_tests',[sys.executable,ROOT/'tests/test_ipa_pipeline.py'],env)
     revision=subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,text=True,capture_output=True).stdout.strip()
     source_files={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in native.iterdir() if p.name in FILES}
     fixture=ROOT/'tests/swift-fixture/CodexSessionEngineTests.swift'
     source_files[str(fixture.relative_to(ROOT))]=hashlib.sha256(fixture.read_bytes()).hexdigest()
     log_text=logs.read_text()
     counts=re.findall(r'^Ran (\d+) tests? in [^\n]+\n\nOK$',log_text,re.M)
-    if len(counts)!=2:
-        raise SystemExit('Expected two successful unittest summaries in the actual test log')
+    if len(counts)!=5:
+        raise SystemExit('Expected five successful unittest summaries in the actual test log')
     report={
         'upstream_commit':EXPECTED,'overlay_commit_before_verification':revision,
         'local_checks_passed':completed,'local_test_log':'build/verification.log',

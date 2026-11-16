@@ -54,7 +54,7 @@ xcodebuild -project src/ios/Minis.xcodeproj -scheme Minis -configuration Release
   -sdk iphoneos -destination 'generic/platform=iOS' \
   -derivedDataPath "$DERIVED" -archivePath "$ARCHIVE" \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM= \
-  IPHONEOS_DEPLOYMENT_TARGET=16.5 ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
+  IPHONEOS_DEPLOYMENT_TARGET=16.5 CURRENT_PROJECT_VERSION=2 ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
   archive | tee "$ROOT/build/xcode-archive.log"
 APP="$ARCHIVE/Products/Applications/Minis.app"
 test -d "$APP" && test -s "$APP/Minis"

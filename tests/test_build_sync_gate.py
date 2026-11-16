@@ -13,6 +13,7 @@ from unittest import mock
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts'))
 import disable_unprovisioned_sync as gate
+import repair_provider_paste as paste
 import prepare_ipa_build as prep
 from overlay_lib import EXPECTED, SOURCE, FILES, Refused, blob_hash
 
@@ -23,14 +24,14 @@ REQUIRED=('Info.plist','Minis.entitlements','ShareExtension/ShareExtension.entit
           'Configs/ProviderCustomization.xcconfig.example','Shared/DeepLinkRouter.swift',
           'ShareExtension/ShareViewController.swift','Minis.xcodeproj/project.pbxproj')
 
-@unittest.skipUnless(all((IOS/p).is_file() for p in (*gate.PINNED,*REQUIRED)),
+@unittest.skipUnless(all((IOS/p).is_file() for p in (*gate.PINNED,*paste.PINNED,*REQUIRED)),
                      'Requires the fixed public upstream source fixture; no Apple commands run')
 class SyncGateTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(prefix='codex-build-sync-test-')
         self.repo=Path(self.tmp.name)
         self.ios=self.repo/'src/ios'
-        self.upstream_before={p:(IOS/p).read_bytes() for p in (*gate.PINNED,*REQUIRED)}
+        self.upstream_before={p:(IOS/p).read_bytes() for p in (*gate.PINNED,*paste.PINNED,*REQUIRED)}
         for rel,data in self.upstream_before.items():
             p=self.ios/rel;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(data)
         engine=self.ios/'CodexEngine';engine.mkdir()

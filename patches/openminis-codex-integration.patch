@@ -1,25 +1,27 @@
 --- a/src/ios/Minis.xcodeproj/project.pbxproj
 +++ b/src/ios/Minis.xcodeproj/project.pbxproj
-@@ -619,6 +619,12 @@
+@@ -619,6 +619,13 @@
  		RCL000119 /* BackupHistoryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RCL000219 /* BackupHistoryDetailView.swift */; };
  		RCL000120 /* BackupCategoryIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = RCL000220 /* BackupCategoryIcon.swift */; };
  		RCL000121 /* BackupHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = RCL000221 /* BackupHUD.swift */; };
 +		20CA2EFED5EB1EEC4883A642 /* CodexProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FFE9D1F8D175C0B866EACE3 /* CodexProtocol.swift */; };
 +		19203341FA7849592A863BCD /* CodexSessionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B4B77E3CA2FD3DB9CE09721 /* CodexSessionEngine.swift */; };
 +		6FF60DC4315742E4D0C78BCE /* CodexSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C889FA618EACB12A44B25165 /* CodexSessionView.swift */; };
++		DAE42CA7C32390F81B544ABC /* OMProviderPaste.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020D301BDB388EDB7CB63549 /* OMProviderPaste.swift */; };
 +		456157F084C75ECB89A720E4 /* OMCodexProcessHost.m in Sources */ = {isa = PBXBuildFile; fileRef = A43BEED7FBC15B61E1B2D991 /* OMCodexProcessHost.m */; };
 +		25B013EEBA90F696C945328E /* OMCodexFramer.c in Sources */ = {isa = PBXBuildFile; fileRef = 205F7213E1335C4C86AB5EE8 /* OMCodexFramer.c */; };
 +		D7D79CD5B8B959B912C15E83 /* CodexRuntime in Resources */ = {isa = PBXBuildFile; fileRef = E05383F53E79D4BE5CDE7657 /* CodexRuntime */; };
  /* End PBXBuildFile section */
  
  /* Begin PBXContainerItemProxy section */
-@@ -1441,6 +1447,14 @@
+@@ -1441,6 +1448,15 @@
  		RCL000219 /* BackupHistoryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupHistoryDetailView.swift; sourceTree = "<group>"; };
  		RCL000220 /* BackupCategoryIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupCategoryIcon.swift; sourceTree = "<group>"; };
  		RCL000221 /* BackupHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupHUD.swift; sourceTree = "<group>"; };
 +		8FFE9D1F8D175C0B866EACE3 /* CodexProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexProtocol.swift; sourceTree = "<group>"; };
 +		9B4B77E3CA2FD3DB9CE09721 /* CodexSessionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexSessionEngine.swift; sourceTree = "<group>"; };
 +		C889FA618EACB12A44B25165 /* CodexSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexSessionView.swift; sourceTree = "<group>"; };
++		020D301BDB388EDB7CB63549 /* OMProviderPaste.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OMProviderPaste.swift; sourceTree = "<group>"; };
 +		A43BEED7FBC15B61E1B2D991 /* OMCodexProcessHost.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = OMCodexProcessHost.m; sourceTree = "<group>"; };
 +		B7CB3B17972576BAEF3B168A /* OMCodexProcessHost.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OMCodexProcessHost.h; sourceTree = "<group>"; };
 +		205F7213E1335C4C86AB5EE8 /* OMCodexFramer.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = OMCodexFramer.c; sourceTree = "<group>"; };
@@ -28,7 +30,7 @@
  /* End PBXFileReference section */
  
  /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-@@ -1694,6 +1708,7 @@
+@@ -1694,6 +1710,7 @@
  		E51000031 /* Minis */ = {
  			isa = PBXGroup;
  			children = (
@@ -36,7 +38,7 @@
  				E51000011 /* MinisApp.swift */,
  				E5QA0102 /* AppDelegate.swift */,
  				E5E000018 /* Minis.entitlements */,
-@@ -2708,6 +2723,21 @@
+@@ -2708,6 +2725,22 @@
  			path = MCP;
  			sourceTree = "<group>";
  		};
@@ -46,6 +48,7 @@
 +				8FFE9D1F8D175C0B866EACE3 /* CodexProtocol.swift */,
 +				9B4B77E3CA2FD3DB9CE09721 /* CodexSessionEngine.swift */,
 +				C889FA618EACB12A44B25165 /* CodexSessionView.swift */,
++				020D301BDB388EDB7CB63549 /* OMProviderPaste.swift */,
 +				A43BEED7FBC15B61E1B2D991 /* OMCodexProcessHost.m */,
 +				B7CB3B17972576BAEF3B168A /* OMCodexProcessHost.h */,
 +				205F7213E1335C4C86AB5EE8 /* OMCodexFramer.c */,
@@ -58,7 +61,7 @@
  /* End PBXGroup section */
  
  /* Begin PBXNativeTarget section */
-@@ -2959,6 +2989,7 @@
+@@ -2959,6 +2992,7 @@
  			isa = PBXResourcesBuildPhase;
  			buildActionMask = 2147483647;
  			files = (
@@ -66,13 +69,14 @@
  				E51000004 /* Preview Assets.xcassets in Resources */,
  				AA26CCB72F31067900AECF2D /* alpine-rootfs.zip in Resources */,
  				E5BSH0004 /* bashism_rules.json in Resources */,
-@@ -3087,6 +3118,11 @@
+@@ -3087,6 +3121,12 @@
  			isa = PBXSourcesBuildPhase;
  			buildActionMask = 2147483647;
  			files = (
 +				20CA2EFED5EB1EEC4883A642 /* CodexProtocol.swift in Sources */,
 +				19203341FA7849592A863BCD /* CodexSessionEngine.swift in Sources */,
 +				6FF60DC4315742E4D0C78BCE /* CodexSessionView.swift in Sources */,
++				DAE42CA7C32390F81B544ABC /* OMProviderPaste.swift in Sources */,
 +				456157F084C75ECB89A720E4 /* OMCodexProcessHost.m in Sources */,
 +				25B013EEBA90F696C945328E /* OMCodexFramer.c in Sources */,
  				AC0000202 /* ProviderCustomizationGenerated.swift in Sources */,

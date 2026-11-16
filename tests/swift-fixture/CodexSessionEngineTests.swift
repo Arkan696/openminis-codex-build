@@ -3,6 +3,8 @@
 // OMCodexProcessHost bridging header. Fixture transport never launches the core.
 import XCTest
 import Foundation
+import SwiftUI
+import UIKit
 
 @MainActor
 private final class FixtureTransport: CodexTransport {
@@ -348,5 +350,144 @@ final class CodexSessionEngineTests: XCTestCase {
         XCTAssertFalse(safe.contains("a@b.com"))
         XCTAssertFalse(safe.contains("secretcode"))
         XCTAssertFalse(safe.contains("sensitive"))
+    }
+}
+
+// Synthetic inputs only; never reads the actual clipboard or any Keychain item.
+@MainActor
+private final class ProviderPasteFixtureBox {
+    var value: String
+    init(_ value: String) { self.value = value }
+    var binding: Binding<String> { Binding(get: { self.value }, set: { self.value = $0 }) }
+}
+
+@MainActor
+final class OMProviderPasteTests: XCTestCase {
+    private func flushMain() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
+    func testPasteTextUsesCurrentBindingAndSafeFeedback() async {
+        let box = ProviderPasteFixtureBox("old-input")
+        let state = OMProviderPasteState(), receiver = UUID()
+        state.attach(receiverID: receiver, text: box.binding, fieldID: "fixture-key", secret: true)
+        state.request(receiverID: receiver) { $0(.text("  synthetic-fixture-only-key\n")) }
+        XCTAssertEqual(state.status, .loading)
+        await flushMain()
+        XCTAssertEqual(box.value, "synthetic-fixture-only-key")
+        XCTAssertEqual(state.status, .success)
+        XCTAssertFalse(state.status.message.contains(box.value))
+    }
+
+    func testPasteURLPreservesVersionQueryAndFragment() async {
+        let url = "https://fixture.invalid/v1beta?api-version=fixture#test"
+        let box = ProviderPasteFixtureBox("")
+        let state = OMProviderPasteState(), receiver = UUID()
+        state.attach(receiverID: receiver, text: box.binding, fieldID: "fixture-url", secret: false)
+        state.request(receiverID: receiver) { $0(.text("\r\n" + url + "\n")) }
+        await flushMain()
+        XCTAssertEqual(box.value, url)
+        XCTAssertEqual(state.status, .success)
+        XCTAssertFalse(state.status.message.contains(url))
+    }
+
+    func testEmptyNontextAndLoadFailureDoNotBlankExistingInput() async {
+        let box = ProviderPasteFixtureBox("keep-fixture-input")
+        let state = OMProviderPasteState(), receiver = UUID()
+        state.attach(receiverID: receiver, text: box.binding, fieldID: "fixture-key", secret: true)
+        let cases: [(OMProviderPasteLoadedText, OMProviderPasteStatus)] = [
+            (.text(" \n\r "), .empty), (.nonText, .nonText), (.failed, .loadFailed)
+        ]
+        for (result, expected) in cases {
+            state.request(receiverID: receiver) { $0(result) }
+            await flushMain()
+            XCTAssertEqual(state.status, expected)
+            XCTAssertEqual(box.value, "keep-fixture-input")
+        }
+    }
+
+    func testOversizeNULAndInternalNewlineAreRejected() {
+        for (text, secret) in [(String(repeating: "x", count: 8193), true),
+                               (String(repeating: "x", count: 16385), false),
+                               ("fixture\0value", true), ("https://fixture.invalid/\nsecond", false)] {
+            if case .success = OMProviderPasteValidation.validate(text, secret: secret) {
+                XCTFail("Expected bounded text validation to reject synthetic input")
+            }
+        }
+    }
+
+    func testManualEditEvenRestoredRetiresPendingPaste() async {
+        let box = ProviderPasteFixtureBox("original-fixture")
+        let state = OMProviderPasteState(), receiver = UUID()
+        state.attach(receiverID: receiver, text: box.binding, fieldID: "fixture-key", secret: true)
+        var completion: OMProviderPasteCompletion?
+        state.request(receiverID: receiver) { completion = $0 }
+        box.value = "manual-edit"
+        state.destinationDidChange(fieldID: "fixture-key")
+        box.value = "original-fixture"
+        completion?(.text("late-fixture-paste"))
+        await flushMain()
+        XCTAssertEqual(box.value, "original-fixture")
+        XCTAssertEqual(state.status, .cancelled)
+    }
+
+    func testRebindAndNewerPasteRejectOldCompletion() async {
+        let old = ProviderPasteFixtureBox("old-field"), current = ProviderPasteFixtureBox("new-field")
+        let state = OMProviderPasteState(), receiver = UUID()
+        state.attach(receiverID: receiver, text: old.binding, fieldID: "provider-A", secret: true)
+        var first: OMProviderPasteCompletion?
+        state.request(receiverID: receiver) { first = $0 }
+        state.rebind(receiverID: receiver, text: current.binding, fieldID: "provider-B", secret: true)
+        first?(.text("must-not-cross-provider"))
+        await flushMain()
+        XCTAssertEqual(old.value, "old-field")
+        XCTAssertEqual(current.value, "new-field")
+        var second: OMProviderPasteCompletion?, third: OMProviderPasteCompletion?
+        state.request(receiverID: receiver) { second = $0 }
+        state.request(receiverID: receiver) { third = $0 }
+        third?(.text("latest-fixture-input"))
+        await flushMain()
+        second?(.text("late-second-fixture"))
+        await flushMain()
+        XCTAssertEqual(current.value, "latest-fixture-input")
+        XCTAssertEqual(state.status, .success)
+    }
+
+    func testDisappearanceAndOldDismantleCannotAffectReplacement() async {
+        let box = ProviderPasteFixtureBox("keep-fixture")
+        let state = OMProviderPasteState(), old = UUID(), replacement = UUID()
+        state.attach(receiverID: old, text: box.binding, fieldID: "fixture-key", secret: true)
+        var stale: OMProviderPasteCompletion?
+        state.request(receiverID: old) { stale = $0 }
+        state.suspend(fieldID: "fixture-key")
+        stale?(.text("background-fixture"))
+        await flushMain()
+        XCTAssertEqual(box.value, "keep-fixture")
+        state.attach(receiverID: replacement, text: box.binding, fieldID: "fixture-key", secret: true)
+        var fresh: OMProviderPasteCompletion?
+        state.request(receiverID: replacement) { fresh = $0 }
+        state.detach(receiverID: old)
+        fresh?(.text("fresh-fixture"))
+        await flushMain()
+        fresh?(.text("duplicate-completion"))
+        await flushMain()
+        XCTAssertEqual(box.value, "fresh-fixture")
+        XCTAssertEqual(state.status, .success)
+    }
+
+    func testFeedbackAndNativeResponderUseNoContentLogging() {
+        for status in OMProviderPasteStatus.allCases {
+            XCTAssertFalse(status.message.isEmpty)
+            XCTAssertFalse(status.message.contains("synthetic-fixture-only-key"))
+            XCTAssertFalse(status.message.contains("https://fixture.invalid"))
+        }
+        let receiver = OMProviderPasteReceiver(state: OMProviderPasteState())
+        receiver.configure(secret: false)
+        let provider = NSItemProvider(object: NSURL(string: "https://fixture.invalid/v1")!)
+        XCTAssertTrue(receiver.canPaste([provider]))
+        XCTAssertFalse(receiver.canPaste([]))
+        // Type metadata only, not an actual paste or remote request.
     }
 }

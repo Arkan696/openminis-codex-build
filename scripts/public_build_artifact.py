@@ -5,9 +5,9 @@ import argparse, hashlib, json, shutil, subprocess, tarfile, tempfile, os
 from overlay_lib import ROOT, EXPECTED, Refused, FILES, SOURCE, digest
 from ipa_bundle import inventory, regular_tree
 
-def contains_overlay_host(path):
+def contains_overlay_host(path, marker=b'OMCodexProcessHost'):
     # Scan in bounded chunks; do not load a large compiled Swift binary into RAM.
-    marker=b'OMCodexProcessHost';tail=b''
+    tail=b''
     with Path(path).open('rb') as f:
         while chunk:=f.read(1024*1024):
             data=tail+chunk
@@ -26,6 +26,9 @@ def stage(app,prepared,out):
     # Confirm that the linked application contains the overlay's classes/selectors,
     # in addition to the Xcode archive log; this is not a runtime test.
     if not contains_overlay_host(exe):raise Refused('Compiled application lacks the native Codex host')
+    if manifest.get('provider_system_paste_controls_enabled'):
+        if info.get('CFBundleVersion')!='2':raise Refused('Expected native paste repair build2')
+        if not contains_overlay_host(exe,b'OMProviderPaste'):raise Refused('Compiled application lacks the native provider paste repair')
     for p in regular_tree(app):
         if p.name=='auth.json' or p.suffix in ('.key','.p12','.minisbak'):raise Refused('Unexpected sensitive artifact')
     report={str(p.relative_to(app)):{'bytes':p.stat().st_size,'sha256':digest(p)} for p in regular_tree(app)}
