@@ -1,6 +1,12 @@
 # 合并 OpenMinis + Codex 的 IPA 构建计划
 
-目标仍是完整 OpenMinis（独立 CodexSessionEngine），iOS16.5/TrollStore、与现有App并存。用户已要求继续产出IPA，没有Mac或CI。执行目标没有改变；当前只准备可审阅的构建链，不把生成脚本当作已生成IPA。
+目标仍是完整 OpenMinis（独立 CodexSessionEngine），iOS16.5/TrollStore、与现有App并存。用户已授权公开源码仓库及一次 GitHub Mac 构建，仓库为 `Arkan696/openminis-codex-build`。当前手机没有本地 Xcode；不得把构建脚本、模拟产物或源码包称为 IPA。
+
+## 当前实际进度
+- 首轮运行 `43851884320` 已结束：独立 Codex 引擎的 Swift/SwiftUI/ObjC/C 与 XCTest 源码通过真实 Apple 模拟器编译，XCTest 未执行；LAME、FFmpeg、iSH、rootfs 构建完成。完整 App 在 rclone 的 Go JSON 依赖阶段失败，没有生成 App/IPA。
+- `09204a0` 固定 Go 1.25.5、关闭 jsonv2 实验并提前编译检查出错依赖；本机使用完整 rclone go.mod 的该检查已通过。工作流仅保留手动触发，修复推送不启动新构建。
+- 独立测试 App 没有 iCloud provisioning：构建准备工具在四个固定版本源码文件中保护同步启动、启用和设置页面。仅修改临时构建副本；四项源码变换测试和六项本地 IPA 流程测试通过，不代表本次同步修改已通过 Swift 编译或设备测试。
+- 第二次 Mac 构建未获批准：上次重试确认超时，尚未启动。GitHub 授权登录仍有效，不需要重新登录。
 
 ## 可落实路线
 1. macOS/Xcode机器从固定官方commit获取完整OpenMinis及原生子模块；应用已批准的Codex overlay。先编译隔离引擎工程，再构建iSH、LAME、FFmpeg、Alpine rootfs及rclone，最后构建arm64 iPhoneOS完整Minis目标。

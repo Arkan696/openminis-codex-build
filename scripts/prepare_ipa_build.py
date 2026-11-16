@@ -3,6 +3,7 @@
 from pathlib import Path
 import argparse, hashlib, json, plistlib, subprocess
 from overlay_lib import EXPECTED, Refused, FILES
+from disable_unprovisioned_sync import proposed_changes as proposed_sync_changes
 
 APP_ID='local.openminis.codex'
 GROUP='group.'+APP_ID
@@ -29,13 +30,16 @@ def prepare(repo):
     # Parse entitlements before writing any source, so a malformed input fails early.
     for name in required:
         if name.endswith(('.entitlements','.plist')):plistlib.loads((ios/name).read_bytes())
+    # Validate all four fixed sync sources and anchors before any source writes.
+    sync_changes=proposed_sync_changes(ios)
     changes=[]
     # Rebrand application IDs and keychain service literals, never copy a live app's data.
     for p in sorted(ios.rglob('*')):
         if not p.is_file() or p.is_symlink() or p.suffix not in TEXT_SUFFIXES:continue
         try:s=p.read_text()
         except UnicodeDecodeError:continue
-        t=s.replace('com.openminis.app',APP_ID)
+        rel=p.relative_to(ios).as_posix()
+        t=sync_changes.get(rel,s).replace('com.openminis.app',APP_ID)
         # External launch schemes must not be registered by both installed apps.
         # minis:// remains a resource protocol inside WebViews; only external
         # registration and share-extension launch are redirected to the test app.
@@ -69,6 +73,7 @@ def prepare(repo):
     if not config.exists():config.write_bytes((config.with_suffix('.xcconfig.example')).read_bytes())
     manifest={'schema':1,'upstream_commit':EXPECTED,'bundle_id':APP_ID,'app_group':GROUP,
               'external_scheme':SCHEME,'codex_core_included':False,'xcode_built':False,
+              'unprovisioned_icloud_sync_disabled_in_source':True,
               'signing_entitlements':sign,'modified_paths':changes,
               'limitations':['iCloud/push/WeatherKit are not provisioned for this independent TrollStore identity','Source-level namespace replacement still requires full build and device validation']}
     marker.write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
