@@ -2,8 +2,9 @@
 // Source-only overlay. NOT Swift-typechecked or tested on an iOS device.
 import Foundation
 
-// The Objective-C host guarantees synchronous delivery on main. These closures are
-// deliberately non-Sendable: neither dictionaries nor pending callbacks cross actors.
+// The Objective-C host delivers callbacks on main, synchronously or asynchronously.
+// These closures are deliberately non-Sendable: dictionaries/pending callbacks stay
+// on the main actor; no synchronous callback timing is assumed by the engine.
 @MainActor
 protocol CodexTransport: AnyObject {
     var workingDirectory: String? { get }

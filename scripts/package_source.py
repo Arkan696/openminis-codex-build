@@ -1,14 +1,24 @@
 #!/usr/bin/env python3
 """Package ONLY tracked source, patches and reports. Never an IPA/runtime bundle."""
 from pathlib import Path
+import argparse
 import hashlib
 import json
+import re
 import subprocess
 import zipfile
 from overlay_lib import ROOT, FILES
 
 
 def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--version',default='0.2')
+    args=parser.parse_args()
+    if not re.fullmatch(r'[0-9]+\.[0-9]+(?:\.[0-9]+)?',args.version):
+        raise SystemExit('REFUSED: invalid source archive version')
+    out=ROOT/('dist/OpenMinis-Codex-overlay-source-v'+args.version+'.zip')
+    if out.exists():
+        raise SystemExit('REFUSED: source archive already exists; choose a new version')
     status=subprocess.run(['git','status','--porcelain','--untracked-files=all'],cwd=ROOT,text=True,capture_output=True,check=True).stdout
     if status.strip():
         raise SystemExit('REFUSED: commit source/report changes before producing an archive')
@@ -35,7 +45,6 @@ def main():
     for name in sorted(selected):
         p=ROOT/name
         manifest['files'][name]={'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
-    out=ROOT/'dist/OpenMinis-Codex-overlay-source-v0.1.zip'
     out.parent.mkdir(exist_ok=True)
     with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
         for name in sorted(selected):

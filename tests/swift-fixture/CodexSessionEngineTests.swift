@@ -12,12 +12,23 @@ private final class FixtureTransport: CodexTransport {
     var terminationHandler: ((Int32, Int32) -> Void)?
     var sent: [[String: Any]] = []
     var stopCount = 0
+    var holdStopCompletion = false
+    var deferredStop: (() -> Void)?
     func start(in bundle: Bundle, completion: @escaping (Error?) -> Void) { completion(nil) }
     func send(_ message: [String: Any], completion: @escaping (Error?) -> Void) {
         sent.append(message)
         completion(nil)
     }
-    func stop(completion: @escaping () -> Void) { stopCount += 1; completion() }
+    func stop(completion: @escaping () -> Void) {
+        stopCount += 1
+        if holdStopCompletion { deferredStop = completion }
+        else { completion() }
+    }
+    func finishStop() {
+        let callback = deferredStop
+        deferredStop = nil
+        callback?()
+    }
     func last(_ method: String) -> [String: Any] {
         sent.last { $0["method"] as? String == method }!
     }
@@ -201,6 +212,62 @@ final class CodexSessionEngineTests: XCTestCase {
         XCTAssertEqual(engine.state, .idle)
         XCTAssertNil(engine.threadId)
         XCTAssertFalse(engine.canSend)
+    }
+
+    func testTerminalEventBeforeInterruptAckRetiresPendingAck() {
+        let host = FixtureTransport()
+        let engine = streaming(host)
+        engine.interruptOrStop()
+        host.event("turn/completed", ["threadId": "thread", "turn": turn("interrupted")])
+        XCTAssertEqual(engine.state, .ready)
+        XCTAssertEqual(engine.lastTurnStatus, "interrupted")
+        host.reply("turn/interrupt", [:])
+        XCTAssertEqual(engine.state, .ready)
+        XCTAssertNil(engine.errorMessage)
+        engine.stop()
+    }
+
+    func testCannotReconnectUntilOldHostHasReapedAndFinishedStop() {
+        let host = FixtureTransport()
+        let engine = streaming(host)
+        delta(host, "unfinished")
+        host.holdStopCompletion = true
+        engine.stop()
+        XCTAssertEqual(engine.state, .stopping)
+        XCTAssertFalse(engine.canConnect)
+        XCTAssertTrue(engine.entries.allSatisfy { $0.finished })
+        engine.connect()
+        XCTAssertEqual(host.sent.filter { $0["method"] as? String == "initialize" }.count, 1)
+        host.finishStop()
+        XCTAssertEqual(engine.state, .idle)
+        XCTAssertTrue(engine.canConnect)
+    }
+
+    func testEarlyLoginCompletedBufferedUntilMatchingLoginIDArrives() {
+        let host = FixtureTransport()
+        let engine = CodexSessionEngine(transportFactory: { host })
+        engine.connect()
+        host.reply("initialize", ["userAgent": "fixture"])
+        host.reply("account/read", ["account": NSNull(), "requiresOpenaiAuth": true])
+        engine.loginChatGPT()
+        host.event("account/login/completed", ["loginId": "login", "success": true])
+        XCTAssertEqual(engine.state, .loggingIn)
+        host.reply("account/login/start", ["type": "chatgpt", "loginId": "login",
+                                            "authUrl": "https://auth.openai.com/oauth/authorize?state=fixture"])
+        XCTAssertEqual(engine.state, .confirmingLogin)
+        host.reply("account/read", ["account": ["type": "chatgpt"], "requiresOpenaiAuth": true])
+        XCTAssertTrue(engine.canSend)
+        engine.stop()
+    }
+
+    func testWrongThreadOrTurnCannotCompleteCurrentGeneration() {
+        let host = FixtureTransport()
+        let engine = streaming(host)
+        host.event("turn/completed", ["threadId": "wrong", "turn": turn("completed")])
+        host.event("turn/completed", ["threadId": "thread", "turn": ["id": "wrong-turn", "status": "completed", "items": []]])
+        XCTAssertEqual(engine.state, .streaming)
+        XCTAssertEqual(engine.turnId, "turn")
+        engine.stop()
     }
 
     func testOfficialURLBoundaryAndRedaction() {

@@ -178,7 +178,9 @@ static BOOL OMPipe(int fds[2],NSError **error){
   for(int i=0;i<3 && !e;i++)for(int j=0;j<2 && !e;j++)e=posix_spawn_file_actions_addclose(&actions,p[i][j]);
   // iOS does not expose addchdir_np; thread/start receives this host's empty directory.
   if(!e)e=posix_spawnattr_setpgroup(&attr,0);
-  if(!e)e=posix_spawnattr_setflags(&attr,POSIX_SPAWN_SETPGROUP);
+  // Darwin permits only explicitly dup2'd descriptors in the child. Do not
+  // inherit OpenMinis' unrelated open database, VM or extension descriptors.
+  if(!e)e=posix_spawnattr_setflags(&attr,POSIX_SPAWN_SETPGROUP|POSIX_SPAWN_CLOEXEC_DEFAULT);
   if(e){*error=OMPosix(e,@"spawn setup");break;}
   NSArray *env=@[[NSString stringWithFormat:@"HOME=%@/home",root],[NSString stringWithFormat:@"CODEX_HOME=%@/home/.codex",root],[NSString stringWithFormat:@"TMPDIR=%@/tmp",root],[NSString stringWithFormat:@"CODEX_CA_CERTIFICATE=%@/ca-certificates.crt",runtime],[NSString stringWithFormat:@"SSL_CERT_FILE=%@/ca-certificates.crt",runtime],@"PATH=/usr/bin:/bin",@"LANG=en_US.UTF-8",@"TERM=dumb",@"NO_COLOR=1"];
   envp=calloc(env.count+1,sizeof(char *));if(!envp){*error=OMPosix(ENOMEM,@"environment");break;}

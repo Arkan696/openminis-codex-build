@@ -13,6 +13,10 @@ Completed locally:
 4. Reviewed ephemeral TOML parsed with Python tomllib; native guard contains its fixed SHA256.
 5. Thirteen unittest cases executed: pinned blob identities, deterministic patch, OpenStep PBX parser, five Sources/two headers/one runtime folder, unchanged existing targets/configurations, source application/no-write plan, repeat refusal, rollback on injected failure, wrong commit/baseline refusal, Mach-O device-platform checking, profile/CA/symlink refusal, local-use acknowledgement, bounded/path-safe tar member handling, complete synthetic deb pipeline without execution.
 6. Swift source review found no proven first-login/first-turn deterministic failure, but review is not a compiler test.
+7. Nine local Apple-validation-tool tests executed: generated PBX object graph and target/module/test-host linkage; shared scheme; exact production source copying; default plan/no write/no Xcode; refusal to execute on Linux; explicit booted iOS simulator requirement; compiler-failure report; zero/partial XCTest result refusal; missing xcresult never counted as success. These are Python tests of the generator/runner, not Apple compilation.
+8. Four additional Swift regression scenarios were written (interrupt terminal before ACK, delayed native stop, early login completion, wrong thread/turn), bringing the fixture to 14 test methods. NONE has executed in XCTest.
+
+Total executed Python cases: 22. A mock-only standalone Apple project can now be generated without iSH/FFmpeg/rclone; see APPLE-VALIDATION.md. No runnable Swift compiler has been verified on the current Alpine/musl host. Do not count the static Linux SDK or project generation as typecheck.
 
 Not completed:
 

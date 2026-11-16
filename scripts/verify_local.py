@@ -49,6 +49,7 @@ def main():
     env['CODEX_OVERLAY_BASELINE']=str(args.baseline.resolve())
     env['CODEX_OVERLAY_TEST_CA']=str(args.ca_bundle.resolve())
     run('python_git_pbx_runtime_fixture_tests',[sys.executable,ROOT/'tests/test_overlay_tools.py'],env)
+    run('apple_validation_generator_and_failure_report_tests',[sys.executable,ROOT/'tests/test_apple_validation_tools.py'],env)
     revision=subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,text=True,capture_output=True).stdout.strip()
     source_files={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in native.iterdir() if p.name in FILES}
     report={
@@ -58,6 +59,10 @@ def main():
         'runtime_executed':False,'swift_typechecked':False,'xctest_executed':False,
         'xcode_project_opened_or_built':False,'ios_device_tested':False,
         'app_or_tipa_built':False,'runtime_signature_authenticated':False,
+        'apple_validation_project_generator_tested':True,
+        'apple_validation_project_built':False,
+        'swift_fixture_cases_defined_not_executed':len(re.findall(r'^\s*func test\w+\s*\(', (ROOT/'tests/swift-fixture/CodexSessionEngineTests.swift').read_text(), re.M)),
+        'python_tool_test_cases_passed':22,
     }
     (ROOT/'VERIFICATION.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     print(json.dumps(report,ensure_ascii=False,indent=2))

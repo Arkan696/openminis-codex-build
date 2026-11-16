@@ -1,21 +1,22 @@
 {
   "upstream_commit": "1a71df0f381cefde80bf912b723de6f9831bc177",
-  "overlay_commit_before_verification": "10c6553acde9df9dabada684c1eca8bbb8b8c364",
+  "overlay_commit_before_verification": "02d51f31e92c5a58572782cb87546e67e733990f",
   "local_checks_passed": [
     "objc_ios16_5_strict_syntax",
     "c_ios16_5_object_compile",
     "c_native_fixture_build",
     "c_framer_runtime_via_ctypes",
     "profile_toml_ephemeral_and_disabled_features",
-    "python_git_pbx_runtime_fixture_tests"
+    "python_git_pbx_runtime_fixture_tests",
+    "apple_validation_generator_and_failure_report_tests"
   ],
   "local_test_log": "build/verification.log",
   "checked_source_sha256": {
-    "overlay/src/ios/CodexEngine/CodexProtocol.swift": "ed51611356dc754742565ec2f537ce6a8c6d79d16a958f4669b0390c1750777e",
+    "overlay/src/ios/CodexEngine/CodexProtocol.swift": "4cb03cf3de7def6c30177fb900ddfc66e26ad51ad17b9ac8b4200ced2355fbe2",
     "overlay/src/ios/CodexEngine/OMCodexProcessHost.h": "cb7b6e235aa0dad3d3a73fb5ede140315ba36b075a3cbe33609d1c16966491ea",
     "overlay/src/ios/CodexEngine/OMCodexFramer.h": "28e1951d3373ebe80d5ea92ff27daef22546b1f5f007ccf8a844b87af2b96f5a",
     "overlay/src/ios/CodexEngine/CodexSessionEngine.swift": "8ba424fc2417b74574d9bce56ab1663a18318843f11963cece6c09ca19fa36b0",
-    "overlay/src/ios/CodexEngine/OMCodexProcessHost.m": "bcaf196ce20ab9c1239353153728140683d38131980b693b10e0302e22b23fc5",
+    "overlay/src/ios/CodexEngine/OMCodexProcessHost.m": "66bdc713747ab691020f2806862bc49b202ec4b780769723014fc3ce9bce1304",
     "overlay/src/ios/CodexEngine/CodexSessionView.swift": "3be30ff46d7f6e456b060f1629ba7e0657558c11cc51935976bbe1b662cecbc1",
     "overlay/src/ios/CodexEngine/OMCodexFramer.c": "7de30dd464baf6599992ea0543e36f92012091d8c51e43ad19bc4b9b79fc205c"
   },
@@ -25,5 +26,9 @@
   "xcode_project_opened_or_built": false,
   "ios_device_tested": false,
   "app_or_tipa_built": false,
-  "runtime_signature_authenticated": false
+  "runtime_signature_authenticated": false,
+  "apple_validation_project_generator_tested": true,
+  "apple_validation_project_built": false,
+  "swift_fixture_cases_defined_not_executed": 14,
+  "python_tool_test_cases_passed": 22
 }
