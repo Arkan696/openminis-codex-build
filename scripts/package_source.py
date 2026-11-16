@@ -26,7 +26,7 @@ def main():
         p=ROOT/name
         if p.is_symlink() or not p.is_file():
             raise SystemExit('REFUSED: non-regular tracked source: '+name)
-        if p.suffix.lower() not in ('.py','.swift','.c','.h','.md','.toml','.patch','.json','.txt') and name not in ('LICENSE','.gitignore'):
+        if p.suffix.lower() not in ('.py','.swift','.c','.h','.m','.md','.toml','.patch','.json','.txt') and name not in ('LICENSE','.gitignore'):
             raise SystemExit('REFUSED: unexpected tracked artifact: '+name)
         if p.stat().st_size>2*1024*1024 or 'CodexRuntime' in p.parts:
             raise SystemExit('REFUSED: runtime/large artifact cannot enter source archive')
