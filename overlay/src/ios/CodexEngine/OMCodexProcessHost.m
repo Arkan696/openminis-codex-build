@@ -250,7 +250,18 @@ static bool OMFramedLine(const unsigned char *p,size_t n,void *owner){return [(_
     while(consumed<65536 && (n=read(err,discarded,sizeof(discarded)))>0)consumed+=(size_t)n;
     if(consumed)[self diagnostic:@"Core emitted stderr; raw content omitted from export."];
    }
-   if(reaped)break;
+   if(reaped){
+    // waitpid says the child is gone, but both pipes may still contain buffered
+    // NDJSON. Drain to EOF/EAGAIN before leaving this worker; otherwise a final
+    // item/completed or turn/completed can be lost.
+    BOOL outDone=NO,errDone=NO;
+    while(!outDone || !errDone){
+     if(!outDone){char tail[8192];ssize_t n;while((n=read(output,tail,sizeof(tail)))>0){if(!OMCodexFramerFeed(&framer,tail,(size_t)n,OMFramedLine,(__bridge void *)self)){error=OMError(11,@"Invalid or oversized protocol output");outDone=YES;break;}}if(n==0 || (n<0 && errno!=EAGAIN && errno!=EWOULDBLOCK))outDone=YES;}
+     if(!errDone){char tail[4096];ssize_t n;while((n=read(err,tail,sizeof(tail)))>0){}if(n==0 || (n<0 && errno!=EAGAIN && errno!=EWOULDBLOCK))errDone=YES;}
+     if(!outDone || !errDone){struct pollfd tailPoll[2]={{output,POLLIN,0},{err,POLLIN,0}};poll(tailPoll,2,50);}
+    }
+    break;
+   }
   }}
  }
  self.running=NO;
