@@ -4,6 +4,7 @@
     ".github/workflows/build-openminis-public.yml": "230a409ca657e3560a8d52519ad52ce28dab81c0517ad47b894a6764c525a317",
     ".gitignore": "1b64a701ca18281ed76300a532f6e11a3c5eae6418d66d47dffba0275e060ce3",
     "APPLE-VALIDATION.md": "7e05dbef485aee680d6fbc2f54f9e8f99b8a85d94bee59e30d7ddcfadd40b072",
+    "IPA-BUILD-PLAN.md": "3b5500648706ef408adab2590ec0e2053106fadff1717047c6924ffa04887618",
     "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
     "OVERLAY-README.md": "137c6cdd69e7e5f53a50cd871936d21c8bc18fb46d7d5ffa7390521c108cf7e9",
     "VERIFICATION-NOTES.md": "f069fe11a0328d5e2a2dab6ed21d75ff3636fad674ad2c547678a9d387d8d376",
