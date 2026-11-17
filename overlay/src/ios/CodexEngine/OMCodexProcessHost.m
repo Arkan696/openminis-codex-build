@@ -2,6 +2,12 @@
 #import "OMCodexProcessHost.h"
 #import "OMCodexFramer.h"
 #import <CommonCrypto/CommonDigest.h>
+// Build-time launch diagnostic. A separate no-codex-probe archive sets this to
+// 0, so the app and UI never open, hash or spawn CodexRuntime at startup.
+#ifndef OM_CODEX_RUNTIME_PROBE
+#define OM_CODEX_RUNTIME_PROBE 1
+#endif
+static BOOL OMRuntimeProbeEnabled(void){return OM_CODEX_RUNTIME_PROBE!=0;}
 #include <spawn.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -133,6 +139,7 @@ static BOOL OMSafeEnvelope(NSDictionary *m){
 }
 - (void)startInBundle:(NSBundle *)bundle completion:(void (^)(NSError *))completion {
  NSAssert(NSThread.isMainThread,@"Host API must be on main");
+ if(!OMRuntimeProbeEnabled()){completion(OMError(20,@"This diagnostic build has no Codex runtime; the native launcher is disabled."));return;}
  [_lock lock];
  if(_used){[_lock unlock];completion(OMError(9,@"Create a new host per connection"));return;}
  _used=YES;_workerActive=YES;

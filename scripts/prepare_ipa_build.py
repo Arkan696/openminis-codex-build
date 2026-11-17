@@ -11,7 +11,7 @@ GROUP='group.'+APP_ID
 SCHEME='miniscodex'
 TEXT_SUFFIXES={'.swift','.m','.mm','.h','.plist','.entitlements','.pbxproj','.xcconfig','.strings','.json','.js','.html','.css','.md','.txt'}
 
-def prepare(repo):
+def prepare(repo, runtime_probe=True):
     repo=Path(repo).resolve();ios=repo/'src/ios'
     rev=subprocess.run(['git','rev-parse','HEAD'],cwd=repo,capture_output=True,text=True,check=True).stdout.strip()
     if rev!=EXPECTED:raise Refused('Wrong upstream commit')
@@ -36,6 +36,14 @@ def prepare(repo):
     paste_changes=proposed_paste_changes(ios)
     if set(source_changes)&set(paste_changes):raise Refused('Overlapping build source patches')
     source_changes.update(paste_changes)
+    no_codex_probe=False
+    host=ios/'CodexEngine/OMCodexProcessHost.m'
+    expected_probe='#define OM_CODEX_RUNTIME_PROBE 1'
+    if not runtime_probe:
+        if expected_probe not in source_changes[host.relative_to(ios).as_posix()]:
+            raise Refused('Cannot disable runtime probe: build source is unexpected')
+        source_changes[host.relative_to(ios).as_posix()]=source_changes[host.relative_to(ios).as_posix()].replace(expected_probe,'#define OM_CODEX_RUNTIME_PROBE 0',1)
+        no_codex_probe=True
     changes=[]
     # Rebrand application IDs and keychain service literals, never copy a live app's data.
     for p in sorted(ios.rglob('*')):
@@ -78,6 +86,7 @@ def prepare(repo):
     if not config.exists():config.write_bytes((config.with_suffix('.xcconfig.example')).read_bytes())
     manifest={'schema':1,'upstream_commit':EXPECTED,'bundle_id':APP_ID,'app_group':GROUP,
               'external_scheme':SCHEME,'codex_core_included':False,'xcode_built':False,
+              'runtime_probe':runtime_probe,'no_codex_probe':no_codex_probe,
               'unprovisioned_icloud_sync_disabled_in_source':True,
               'provider_system_paste_controls_enabled':True,'ipa_build_number':'2',
               'signing_entitlements':sign,'modified_paths':changes,
@@ -89,9 +98,10 @@ def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--repo',required=True,type=Path)
     ap.add_argument('--disposable-copy',action='store_true',help='Acknowledge that this is a NEW, disposable build checkout')
+    ap.add_argument('--disable-runtime-probe',dest='runtime_probe',action='store_false',help='Build-time launch diagnostic with no Codex executable or runtime injection')
     a=ap.parse_args()
     if not a.disposable_copy:ap.exit(1,'REFUSED: use --disposable-copy only on a separate build checkout\n')
-    try:d=prepare(a.repo)
+    try:d=prepare(a.repo,a.runtime_probe)
     except (Refused,OSError,subprocess.SubprocessError) as e:ap.exit(1,'REFUSED: '+str(e)+'\n')
     print('Prepared disposable source checkout:',d['bundle_id'],'group:',d['app_group'])
     print('No Xcode build, signing, installation or core execution was performed.')

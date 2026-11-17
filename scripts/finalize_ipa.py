@@ -127,19 +127,25 @@ def write_ipa(app, destination, report):
     return report
 
 
-def finalize(artifact, runtime, ldid, out, authorized=False, execute=False):
+def finalize(artifact, runtime, ldid, out, authorized=False, execute=False, runtime_probe=True):
     if not authorized:raise Refused('Confirm that supplied runtime is authorized for local use')
     out=Path(out).absolute();runtime=Path(runtime).absolute();ldid=Path(ldid).absolute()
     if out.suffix.lower()!='.ipa':raise Refused('Output must be an .ipa file')
     for p in (out,Path(str(out)+'.json'),Path(str(out)+'.sha256')):
         if p.exists() or p.is_symlink():raise Refused('Output or evidence file already exists')
-    validated=validate_runtime(runtime)
+    with tempfile.TemporaryDirectory(prefix='ipa-verify-') as tmp:
+        _,manifest=extract_artifact(artifact,Path(tmp))
+        if runtime_probe and manifest.get('runtime_probe') is False:
+            raise Refused('Runtime injection cannot be mixed with a no-codex-probe artifact')
+        if not runtime_probe and manifest.get('runtime_probe') is not False:
+            raise Refused('Cannot omit the runtime from a runtime-probe artifact')
+    if runtime_probe:validated=validate_runtime(runtime)
     if not execute:
         with tempfile.TemporaryDirectory(prefix='ipa-verify-') as tmp:
             app,manifest=extract_artifact(artifact,Path(tmp))
             return {'plan_only':True,'ipa_packaged':False,'core_included':False,
-                    'app_bundle':APP_ID,'runtime_files_checked':sorted(validated),
-                    'network_used':False,'xcode_built_here':False}
+                    'app_bundle':APP_ID,'runtime_files_checked':sorted(validated) if runtime_probe else [],
+                    'runtime_probe':runtime_probe,'network_used':False,'xcode_built_here':False}
     if not ldid.is_file() or not os.access(ldid,os.X_OK):raise Refused('ldid is not an executable local tool')
     out.parent.mkdir(parents=True,exist_ok=True)
     # The shared iOS Files mount may report every file as 0644. Native /tmp
@@ -150,10 +156,11 @@ def finalize(artifact, runtime, ldid, out, authorized=False, execute=False):
         rt.mkdir(exist_ok=True)
         for name in ('codex','codex-code-mode-host'):
             if (rt/name).exists():raise Refused('Public artifact already contains a core')
-        for name in validated:
-            shutil.copyfile(runtime/name,rt/name)
-            (rt/name).chmod(0o755 if name in ('codex','codex-code-mode-host') else 0o644)
-        validate_runtime(rt)
+        if runtime_probe:
+            for name in validated:
+                shutil.copyfile(runtime/name,rt/name)
+                (rt/name).chmod(0o755 if name in ('codex','codex-code-mode-host') else 0o644)
+            validate_runtime(rt)
         # Remove old bundle resource seals/profiles only in this temporary copy.
         for p in list(app.rglob('_CodeSignature')):
             if p.is_dir():shutil.rmtree(p)
@@ -161,7 +168,8 @@ def finalize(artifact, runtime, ldid, out, authorized=False, execute=False):
         signed=sign_bundle(app,manifest,ldid,work)
         report={'app_bundle':APP_ID,'upstream_commit':EXPECTED,
                 'overlay_commit':manifest.get('overlay_commit'),
-                'runtime_input_sha256':validated,'signed_macho':signed,
+                'runtime_input_sha256':validated if runtime_probe else {},
+                'runtime_probe':runtime_probe,'runtime_injected':runtime_probe,'signed_macho':signed,
                 'xcode_built_here':False,'source_build_declared_by_artifact':True}
         candidate=work/'final.ipa';write_ipa(app,candidate,report)
         fd,staged=tempfile.mkstemp(prefix='.ipa-publish-',dir=out.parent)
@@ -185,9 +193,11 @@ def main(argv=None):
     ap.add_argument('--ldid',type=Path,default=Path('/opt/ios-toolchain/bin/ldid-ish'))
     ap.add_argument('--out',type=Path,required=True)
     ap.add_argument('--authorized',action='store_true',help='Confirm supplied core is authorized for your local use')
+    ap.add_argument('--runtime-probe',dest='runtime_probe',action='store_true',default=True,help='Inject the locally supplied runtime (default)')
+    ap.add_argument('--no-runtime-probe',dest='runtime_probe',action='store_false',help='No-codex-probe diagnostic: inject no runtime')
     ap.add_argument('--execute',action='store_true',help='Actually sign and package; otherwise validate inputs only')
     a=ap.parse_args(argv)
-    try:report=finalize(a.artifact,a.runtime,a.ldid,a.out,a.authorized,a.execute)
+    try:report=finalize(a.artifact,a.runtime,a.ldid,a.out,a.authorized,a.execute,a.runtime_probe)
     except (Refused,OSError,ValueError,subprocess.SubprocessError,tarfile.TarError) as e:
         ap.exit(1,'REFUSED: '+str(e)+'\n')
     print(json.dumps(report,ensure_ascii=False,indent=2))

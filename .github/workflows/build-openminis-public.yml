@@ -6,6 +6,14 @@ on:
         description: Fixed OpenMinis commit
         required: true
         default: 1a71df0f381cefde80bf912b723de6f9831bc177
+      build_mode:
+        description: Build variant
+        required: true
+        default: runtime-probe
+        type: choice
+        options:
+          - runtime-probe
+          - no-codex-probe
 jobs:
   build:
     # Uses only public OpenMinis source and this overlay.
@@ -29,11 +37,20 @@ jobs:
           check-latest: false
           cache: false
       - name: Build unsigned public app
-        run: bash ci/build_openminis.sh
+        env:
+          BUILD_MODE: ${{ inputs.build_mode }}
+        run: |
+          case "$BUILD_MODE" in
+            runtime-probe) bash ci/build_openminis.sh ;;
+            no-codex-probe) bash ci/build_openminis.sh --no-codex-probe ;;
+            *) exit 1 ;;
+          esac
       - name: Upload unsigned app artifact
+        env:
+          ARTIFACT_NAME: ${{ inputs.build_mode == 'no-codex-probe' && 'openminis-codex-no-codex-probe-app' || 'openminis-codex-runtime-probe-app' }}
         uses: actions/upload-artifact@v4
         with:
-          name: openminis-codex-public-app-${{ github.run_id }}
+          name: ${ARTIFACT_NAME}-${{ github.run_id }}
           path: build/public-artifact
           if-no-files-found: error
           retention-days: 7

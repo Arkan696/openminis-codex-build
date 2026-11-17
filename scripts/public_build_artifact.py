@@ -23,6 +23,7 @@ def stage(app,prepared,out):
     if manifest.get('upstream_commit')!=EXPECTED or manifest.get('codex_core_included') is not False:raise Refused('Wrong build preparation manifest')
     info,exe,machos=inventory(app)
     if (app/'CodexRuntime/codex').exists() or (app/'CodexRuntime/codex-code-mode-host').exists():raise Refused('User runtime may not be included in a public artifact')
+    if manifest.get('runtime_probe',True) is False and manifest.get('no_codex_probe') is not True:raise Refused('No-codex-probe manifest is inconsistent')
     # Confirm that the linked application contains the overlay's classes/selectors,
     # in addition to the Xcode archive log; this is not a runtime test.
     if not contains_overlay_host(exe):raise Refused('Compiled application lacks the native Codex host')

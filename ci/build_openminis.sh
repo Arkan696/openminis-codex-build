@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Run only in an authorized disposable macOS runner. No user runtime is accepted.
 set -euo pipefail
+RUNTIME_PROBE=1
+[[ "${1:-}" != "--no-codex-probe" ]] || RUNTIME_PROBE=0
 ROOT="${GITHUB_WORKSPACE:?Set GITHUB_WORKSPACE to a NEW build workspace}"
 UPSTREAM="$ROOT/build/OpenMinis"
 DERIVED="$ROOT/build/DerivedData"
@@ -36,7 +38,9 @@ git -C "$UPSTREAM" checkout --detach FETCH_HEAD
 git -C "$UPSTREAM" submodule update --init --recursive deps/ish
 # Apply while the checkout is clean. The next step creates customization locally.
 python3 "$ROOT/scripts/apply_overlay.py" --repo "$UPSTREAM" --apply
-python3 "$ROOT/scripts/prepare_ipa_build.py" --repo "$UPSTREAM" --disposable-copy
+PROBE_ARGS=()
+if [ "$RUNTIME_PROBE" -eq 0 ]; then PROBE_ARGS+=(--disable-runtime-probe); fi
+python3 "$ROOT/scripts/prepare_ipa_build.py" --repo "$UPSTREAM" --disposable-copy "${PROBE_ARGS[@]}"
 cd "$UPSTREAM"
 # Fail before rebuilding the large native libraries if the pinned JSON module
 # cannot compile with the selected Go toolchain. This probe builds, never runs.

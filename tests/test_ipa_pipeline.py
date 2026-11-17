@@ -20,10 +20,11 @@ def fixture(platform=2,minimum=0x100500,kind=2,encrypted=False):
     return struct.pack('<8I',0xfeedfacf,0x100000c,0,kind,2 if encrypted else 1,len(commands),0,0)+commands
 
 
-def signing_manifest():
+def signing_manifest(runtime_probe=True):
     ents={i:{'application-identifier':i,'com.apple.security.application-groups':[bundle.GROUP]} for i in final.BUNDLE_IDS}
     ents[bundle.APP_ID].update(final.CORE_ENT)
     return {'upstream_commit':EXPECTED,'bundle_id':bundle.APP_ID,'codex_core_included':False,
+            'runtime_probe':runtime_probe,'no_codex_probe':not runtime_probe,
             'signing_entitlements':ents,'test_fixture_only':True}
 
 
@@ -118,5 +119,23 @@ class IPATests(unittest.TestCase):
         before=ipa.read_bytes()
         with self.assertRaises(Refused):final.finalize(out,runtime,LDID,ipa,authorized=True,execute=True)
         self.assertEqual(ipa.read_bytes(),before)
+
+    @unittest.skipUnless(LDID.is_file() and SMOKE.is_file() and CA.is_file(),'local signer/smoke/CA unavailable')
+    def test_no_codex_probe_finalizes_without_any_runtime_injection(self):
+        app=self.app(real=True)
+        ext=app/'PlugIns/Share.appex';ext.mkdir(parents=True)
+        (ext/'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':bundle.APP_ID+'.ShareExtension','CFBundleExecutable':'Smoke'}))
+        shutil.copyfile(SMOKE,ext/'Smoke');(ext/'Smoke').chmod(0o755)
+        manifest=signing_manifest(runtime_probe=False);prepared=self.root/'prepared.json';prepared.write_text(json.dumps(manifest))
+        with mock.patch.object(artifact,'contains_overlay_host',return_value=True):
+            out=self.root/'no-codex-artifact';artifact.stage(app,prepared,out)
+        empty_runtime=self.root/'empty-runtime';empty_runtime.mkdir()
+        ipa=self.root/'NO-CODEX-SMOKE-ONLY.ipa'
+        report=final.finalize(out,empty_runtime,LDID,ipa,authorized=True,execute=True,runtime_probe=False)
+        self.assertTrue(report['ipa_packaged']);self.assertFalse(report['runtime_injected'])
+        with zipfile.ZipFile(ipa) as z:
+            self.assertIsNone(z.testzip())
+            self.assertNotIn('Payload/Minis.app/CodexRuntime/codex',z.namelist())
+            self.assertNotIn('Payload/Minis.app/CodexRuntime/codex-code-mode-host',z.namelist())
 
 if __name__=='__main__':unittest.main(verbosity=2)
