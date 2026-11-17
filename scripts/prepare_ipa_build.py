@@ -36,13 +36,13 @@ def prepare(repo, runtime_probe=True):
     paste_changes=proposed_paste_changes(ios)
     if set(source_changes)&set(paste_changes):raise Refused('Overlapping build source patches')
     source_changes.update(paste_changes)
+    host_rel='CodexEngine/OMCodexProcessHost.m'
+    source_changes[host_rel]=(ios/'CodexEngine/OMCodexProcessHost.m').read_text()
     no_codex_probe=False
-    host=ios/'CodexEngine/OMCodexProcessHost.m'
-    expected_probe='#define OM_CODEX_RUNTIME_PROBE 1'
     if not runtime_probe:
-        if expected_probe not in source_changes[host.relative_to(ios).as_posix()]:
+        if expected_probe not in source_changes[host_rel]:
             raise Refused('Cannot disable runtime probe: build source is unexpected')
-        source_changes[host.relative_to(ios).as_posix()]=source_changes[host.relative_to(ios).as_posix()].replace(expected_probe,'#define OM_CODEX_RUNTIME_PROBE 0',1)
+        source_changes[host_rel]=source_changes[host_rel].replace(expected_probe,'#define OM_CODEX_RUNTIME_PROBE 0',1)
         no_codex_probe=True
     changes=[]
     # Rebrand application IDs and keychain service literals, never copy a live app's data.
