@@ -36,7 +36,7 @@
     "scripts/overlay_lib.py": "1f9dadbcd224f7649d4ea41558dc49bbb11ef123a6870f68291f4ef0883e52fb",
     "scripts/package_source.py": "a2de0a5d562c5d6b139216c244e791b2943c63110028a75ba74a1e1d18cc2784",
     "scripts/prepare_codex_runtime.py": "b862a180ec9f22255b9e08193c7e759c30d421c06bdd60fac6e198e273381f5b",
-    "scripts/prepare_ipa_build.py": "eab4bf9b6c7e71fe15ca6251d9b61a2db022ccf76b3c4e361aa366df37da8912",
+    "scripts/prepare_ipa_build.py": "b6d5bd6acc09ae083028719a7cbb97e41189456900ef91cfe4650580a21dbd8f",
     "scripts/public_build_artifact.py": "3c22389f7ae6aed7239430f13cbf2013c597e947226db18030f9153a5d663fc6",
     "scripts/repair_provider_paste.py": "49d7eb890247fd8bdf25654af62eed67cc22178c2d21e55fa3261561461d3fb8",
     "scripts/verify_apple.py": "bd3166258595d4f8fa0561b00367ae12e2165bbc24459c13a822b42aa1e20eed",

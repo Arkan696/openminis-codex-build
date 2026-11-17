@@ -39,6 +39,7 @@ def prepare(repo, runtime_probe=True):
     host_rel='CodexEngine/OMCodexProcessHost.m'
     source_changes[host_rel]=(ios/'CodexEngine/OMCodexProcessHost.m').read_text()
     no_codex_probe=False
+    expected_probe='#define OM_CODEX_RUNTIME_PROBE 1'
     if not runtime_probe:
         if expected_probe not in source_changes[host_rel]:
             raise Refused('Cannot disable runtime probe: build source is unexpected')
